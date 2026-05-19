@@ -11,6 +11,7 @@ pub mod pet;
 pub mod ping;
 pub mod temp;
 pub mod tsmap;
+pub mod weather;
 
 use ratatui::layout::Rect;
 use ratatui::Frame;
@@ -46,5 +47,6 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(pet::PetPanel::new()),
         Box::new(moon::MoonPanel::new()),
         Box::new(clock::ClockPanel::new()),
+        Box::new(weather::WeatherPanel::new()),
     ]
 }
