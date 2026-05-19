@@ -4,6 +4,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
+use crate::layout::braille_aspect_bounds;
 use ratatui::widgets::canvas::{Canvas, Map, MapResolution, Points};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -271,10 +272,11 @@ impl Panel for TsMapPanel {
         let map_area = block.inner(chunks[0]);
         f.render_widget(block, chunks[0]);
 
+        let (xb, yb) = braille_aspect_bounds(map_area, 180.0, 90.0);
         let canvas = Canvas::default()
             .marker(Marker::Braille)
-            .x_bounds([-180.0, 180.0])
-            .y_bounds([-90.0, 90.0])
+            .x_bounds(xb)
+            .y_bounds(yb)
             .paint(move |ctx| {
                 ctx.draw(&Map {
                     resolution: MapResolution::High,

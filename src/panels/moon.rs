@@ -4,6 +4,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
+use crate::layout::braille_aspect_bounds;
 use ratatui::widgets::canvas::{Canvas, Points};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -143,10 +144,11 @@ impl Panel for MoonPanel {
         let inner = canvas_block.inner(chunks[0]);
         f.render_widget(canvas_block, chunks[0]);
 
+        let (xb, yb) = braille_aspect_bounds(inner, 1.15, 1.15);
         let canvas = Canvas::default()
             .marker(Marker::Braille)
-            .x_bounds([-1.15, 1.15])
-            .y_bounds([-1.15, 1.15])
+            .x_bounds(xb)
+            .y_bounds(yb)
             .paint(move |ctx| {
                 // Shadow first so lit overlays cleanly at the terminator.
                 ctx.draw(&Points {
