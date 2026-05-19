@@ -231,24 +231,35 @@ impl Panel for ClockPanel {
         let show_progress = area.height >= 9;
         let show_meta = area.height >= 7;
 
-        // Layout: title bar (1 row) + big clock (5 rows) + date (1 row) + meta (1 row, optional) + progress (1 row, optional)
+        // Layout: flex top spacer, title, gap, big clock, gap, date, [meta], [gauge], flex bottom.
+        // Flex top + bottom both Min(0) so the whole content block floats vertically centered
+        // in the panel area instead of hugging the top nav.
         let mut constraints: Vec<Constraint> = vec![
-            Constraint::Length(1),
-            Constraint::Length(5),
-            Constraint::Length(2),
+            Constraint::Min(0),       // 0: flex top
+            Constraint::Length(1),    // 1: title bar
+            Constraint::Length(1),    // 2: gap
+            Constraint::Length(5),    // 3: big clock
+            Constraint::Length(1),    // 4: gap
+            Constraint::Length(1),    // 5: date
         ];
         if show_meta {
-            constraints.push(Constraint::Length(1));
+            constraints.push(Constraint::Length(1)); // meta row
         }
         if show_progress {
-            constraints.push(Constraint::Length(1));
+            constraints.push(Constraint::Length(1)); // small gap
+            constraints.push(Constraint::Length(1)); // gauge
         }
-        constraints.push(Constraint::Min(0));
+        constraints.push(Constraint::Min(0)); // flex bottom
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
             .split(area);
+
+        // Indices into chunks (skip leading flex top at index 0)
+        let i_title = 1;
+        let i_clock = 3;
+        let i_date = 5;
 
         // Title bar with format chip
         let fmt_label = if self.format_24h { "24h" } else { "12h" };
@@ -262,7 +273,7 @@ impl Panel for ClockPanel {
             Span::styled("f", theme::pane_header_focused()),
             Span::styled(" to toggle", theme::dim()),
         ]);
-        f.render_widget(Paragraph::new(title), chunks[0]);
+        f.render_widget(Paragraph::new(title), chunks[i_title]);
 
         // Big digital clock: 5 rows, blinking colon synced to seconds
         let blink_on = (self.second & 1) == 0;
@@ -280,7 +291,7 @@ impl Panel for ClockPanel {
         }
         f.render_widget(
             Paragraph::new(lines).alignment(Alignment::Center),
-            chunks[1],
+            chunks[i_clock],
         );
 
         // Date line + AM/PM badge if 12h
@@ -303,10 +314,10 @@ impl Panel for ClockPanel {
         }
         f.render_widget(
             Paragraph::new(Line::from(date_spans)).alignment(Alignment::Center),
-            chunks[2],
+            chunks[i_date],
         );
 
-        let mut next_idx = 3;
+        let mut next_idx = i_date + 1;
         if show_meta {
             let meta = Line::from(vec![
                 Span::styled("ISO week ", theme::dim()),
@@ -327,6 +338,8 @@ impl Panel for ClockPanel {
         }
 
         if show_progress {
+            // Skip the gap chunk before the gauge
+            let gauge_idx = next_idx + 1;
             let day_pct = ((self.seconds_into_day as f64 / 86400.0) * 100.0).round() as u16;
             let gauge = Gauge::default()
                 .block(
@@ -339,7 +352,7 @@ impl Panel for ClockPanel {
                 )
                 .gauge_style(Style::default().fg(theme::magenta()))
                 .percent(day_pct);
-            f.render_widget(gauge, chunks[next_idx]);
+            f.render_widget(gauge, chunks[gauge_idx]);
         }
     }
 }
