@@ -6,6 +6,7 @@ pub mod mem;
 pub mod moon;
 pub mod net;
 pub mod peon;
+pub mod pet;
 pub mod ping;
 pub mod temp;
 pub mod tsmap;
@@ -36,6 +37,7 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(peon::PeonPanel::new()),
         Box::new(temp::TempPanel::new()),
         Box::new(tsmap::TsMapPanel::new()),
+        Box::new(pet::PetPanel::new()),
         Box::new(moon::MoonPanel::new()),
     ]
 }
