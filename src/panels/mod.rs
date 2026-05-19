@@ -1,4 +1,5 @@
 pub mod battery;
+pub mod clock;
 pub mod commits;
 pub mod cpu;
 pub mod disk;
@@ -21,6 +22,11 @@ pub trait Panel {
     fn refresh_ms(&self) -> u64 {
         500
     }
+    /// Panel-specific key handler. Return true if the key was consumed; false
+    /// to let the global handler process it. Default: not handled.
+    fn handle_key(&mut self, _key: crossterm::event::KeyEvent) -> bool {
+        false
+    }
 }
 
 // Default registry: cpu, mem, net, disk, ping, commits, peon, moon.
@@ -39,5 +45,6 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(tsmap::TsMapPanel::new()),
         Box::new(pet::PetPanel::new()),
         Box::new(moon::MoonPanel::new()),
+        Box::new(clock::ClockPanel::new()),
     ]
 }

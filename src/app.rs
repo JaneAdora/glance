@@ -217,7 +217,11 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 state.switch_to(target);
             }
         }
-        _ => {}
+        _ => {
+            // Unrecognised global key — give the active panel a chance to consume it.
+            let idx = state.current;
+            let _ = state.panels[idx].handle_key(key);
+        }
     }
     false
 }
