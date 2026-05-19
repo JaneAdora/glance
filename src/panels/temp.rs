@@ -62,11 +62,11 @@ fn read_zones() -> Vec<Zone> {
 
 fn color_for(c: f64) -> Color {
     if c >= 80.0 {
-        Color::Rgb(0xff, 0x6e, 0xc7) // magenta alert
+        theme::magenta() // magenta alert
     } else if c >= 60.0 {
-        Color::Rgb(0xe8, 0x8b, 0x9f) // pink warm
+        theme::pink() // pink warm
     } else {
-        Color::Rgb(0xc5, 0xa3, 0xff) // lavender cool
+        theme::lavender() // lavender cool
     }
 }
 
@@ -95,11 +95,7 @@ impl Panel for TempPanel {
 
     fn render(&self, f: &mut Frame, area: Rect) {
         if self.zones.is_empty() {
-            f.render_widget(
-                Paragraph::new("(no thermal zones found; /sys/class/thermal unavailable)")
-                    .style(theme::dim()),
-                area,
-            );
+            f.render_widget(crate::widgets::empty("no thermal zones; /sys/class/thermal unavailable"), area);
             return;
         }
 

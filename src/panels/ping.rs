@@ -18,13 +18,15 @@ use std::time::{Duration, Instant};
 
 const HIST: usize = 60;
 
-const PALETTE: &[Color] = &[
-    Color::Rgb(0xff, 0x6e, 0xc7), // magenta
-    Color::Rgb(0xe8, 0x8b, 0x9f), // pink
-    Color::Rgb(0xc5, 0xa3, 0xff), // lavender
-    Color::Rgb(0x9b, 0xe1, 0x95), // sage (extra)
-    Color::Rgb(0xff, 0xd9, 0x6e), // amber (extra)
-];
+fn palette() -> [Color; 5] {
+    [
+        theme::magenta(),
+        theme::pink(),
+        theme::lavender(),
+        theme::sage(),
+        theme::amber(),
+    ]
+}
 
 struct HostStats {
     name: String,
@@ -137,10 +139,7 @@ impl Panel for PingPanel {
 
     fn render(&self, f: &mut Frame, area: Rect) {
         if self.hosts.is_empty() {
-            f.render_widget(
-                Paragraph::new("(no hosts; set GLANCE_PING_HOSTS=h1,h2)").style(theme::dim()),
-                area,
-            );
+            f.render_widget(crate::widgets::empty("no hosts; set GLANCE_PING_HOSTS=h1,h2"), area);
             return;
         }
 
@@ -156,7 +155,7 @@ impl Panel for PingPanel {
             theme::pane_header(),
         )));
         for (i, h) in self.hosts.iter().enumerate() {
-            let color = PALETTE[i % PALETTE.len()];
+            let color = palette()[i % 5];
             let current = match h.last_ms {
                 Some(ms) => format!("{:>6.1}", ms),
                 None => "  drop".to_string(),
@@ -205,7 +204,7 @@ impl Panel for PingPanel {
             .iter()
             .enumerate()
             .map(|(i, h)| {
-                let color = PALETTE[i % PALETTE.len()];
+                let color = palette()[i % 5];
                 Dataset::default()
                     .name(h.name.clone())
                     .marker(Marker::Braille)

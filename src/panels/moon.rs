@@ -153,11 +153,11 @@ impl Panel for MoonPanel {
                 // Shadow first so lit overlays cleanly at the terminator.
                 ctx.draw(&Points {
                     coords: &shadow,
-                    color: Color::Rgb(0xc5, 0xa3, 0xff), // LAVENDER
+                    color: theme::lavender(), // LAVENDER
                 });
                 ctx.draw(&Points {
                     coords: &lit,
-                    color: Color::Rgb(0xe8, 0x8b, 0x9f), // PINK
+                    color: theme::pink(), // PINK
                 });
             });
         f.render_widget(canvas, inner);
@@ -172,7 +172,7 @@ impl Panel for MoonPanel {
             Line::from(vec![
                 Span::styled(
                     format!("  {:.0}% lit", self.illumination * 100.0),
-                    Style::default().fg(Color::Rgb(0xe8, 0x8b, 0x9f)),
+                    Style::default().fg(theme::pink()),
                 ),
                 Span::styled("    age ", theme::dim()),
                 Span::styled(

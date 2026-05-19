@@ -131,10 +131,7 @@ impl Panel for NetPanel {
 
     fn render(&self, f: &mut Frame, area: Rect) {
         if self.order.is_empty() {
-            f.render_widget(
-                ratatui::widgets::Paragraph::new("(no interfaces)").style(theme::dim()),
-                area,
-            );
+            f.render_widget(crate::widgets::empty("no interfaces"), area);
             return;
         }
         let per_if = 3u16;

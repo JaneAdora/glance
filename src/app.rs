@@ -113,13 +113,24 @@ fn render(f: &mut ratatui::Frame, state: &AppState) {
     header::render(
         f,
         chunks[0],
-        state.panels[state.current].name(),
+        &state.panels,
         state.current,
-        state.panels.len(),
         state.current_transient(),
     );
 
-    state.panels[state.current].render(f, chunks[1]);
+    // Apply 1-col side padding so panel content never touches the screen edge.
+    let body_rect = chunks[1];
+    let padded = if body_rect.width > 2 {
+        ratatui::layout::Rect {
+            x: body_rect.x + 1,
+            y: body_rect.y,
+            width: body_rect.width - 2,
+            height: body_rect.height,
+        }
+    } else {
+        body_rect
+    };
+    state.panels[state.current].render(f, padded);
 
     footer::render(f, chunks[2], state.current_transient());
 
@@ -180,6 +191,14 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.last_tick[idx] = Instant::now();
             state.toast("refreshed");
         }
+        KeyCode::Char('[') => {
+            let n = crate::brightness::dim();
+            state.toast(format!("brightness {}", n));
+        }
+        KeyCode::Char(']') => {
+            let n = crate::brightness::brighten();
+            state.toast(format!("brightness {}", n));
+        }
         KeyCode::Char('n') | KeyCode::Right | KeyCode::Tab => {
             let next = (state.current + 1) % state.panels.len();
             state.switch_to(next);
@@ -205,13 +224,14 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
 
 const HELP_TEXT: &str = "\
 PANELS
-  1-9, 0   jump to panel by slot
-  n / →    next panel
-  p / ←    previous panel
-  Tab      next panel
+  1-9, 0   jump to panel by slot (slot 0 + extras reachable via n/p)
+  n / Tab  next panel
+  p        previous panel
 
 VIEW
   r        force-refresh current panel
+  [        dim screen
+  ]        brighten screen
   ?        toggle help
   q / Esc  quit (Ctrl-C also works)
 

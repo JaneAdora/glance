@@ -180,11 +180,6 @@ fn relay_coords(code: &str) -> Option<(f64, f64)> {
     None
 }
 
-const SELF_COLOR: Color = Color::Rgb(0xff, 0x6e, 0xc7); // magenta
-const PEER_ONLINE: Color = Color::Rgb(0xe8, 0x8b, 0x9f); // pink
-const PEER_OFFLINE: Color = Color::Rgb(0x80, 0x60, 0xb0); // dim purple
-const INFRA: Color = Color::Rgb(0xc5, 0xa3, 0xff); // lavender
-const MAP_BORDER: Color = Color::Rgb(0x60, 0x4f, 0x80); // dimmer lavender for map borders
 
 impl Panel for TsMapPanel {
     fn name(&self) -> &str {
@@ -230,10 +225,7 @@ impl Panel for TsMapPanel {
         let state = match &self.state {
             Some(s) => s,
             None => {
-                f.render_widget(
-                    Paragraph::new("loading tailscale status…").style(theme::dim()),
-                    area,
-                );
+                f.render_widget(crate::widgets::loading("loading tailscale status"), area);
                 return;
             }
         };
@@ -280,25 +272,25 @@ impl Panel for TsMapPanel {
             .paint(move |ctx| {
                 ctx.draw(&Map {
                     resolution: MapResolution::High,
-                    color: MAP_BORDER,
+                    color: theme::map_border(),
                 });
                 ctx.layer();
                 if !infra_pts.is_empty() {
                     ctx.draw(&Points {
                         coords: &infra_pts,
-                        color: INFRA,
+                        color: theme::lavender(),
                     });
                 }
                 if !offline_pts.is_empty() {
                     ctx.draw(&Points {
                         coords: &offline_pts,
-                        color: PEER_OFFLINE,
+                        color: theme::dim_purple(),
                     });
                 }
                 if !online_pts.is_empty() {
                     ctx.draw(&Points {
                         coords: &online_pts,
-                        color: PEER_ONLINE,
+                        color: theme::pink(),
                     });
                 }
                 if let Some((lat, lon)) = self_pt {
@@ -312,7 +304,7 @@ impl Panel for TsMapPanel {
                             (lon, lat + s),
                             (lon, lat - s),
                         ],
-                        color: SELF_COLOR,
+                        color: theme::magenta(),
                     });
                 }
             });
@@ -326,15 +318,15 @@ impl Panel for TsMapPanel {
 
         let lines = vec![
             Line::from(vec![
-                Span::styled("  ✚ ", Style::default().fg(SELF_COLOR)),
+                Span::styled("  ✚ ", Style::default().fg(theme::magenta())),
                 Span::styled(format!("self ({} @ {}) ", state.self_host, state.self_relay), theme::pane_header()),
             ]),
             Line::from(vec![
-                Span::styled("  ● ", Style::default().fg(PEER_ONLINE)),
+                Span::styled("  ● ", Style::default().fg(theme::pink())),
                 Span::styled(format!("{} online   ", online_count), theme::pane_header()),
-                Span::styled("● ", Style::default().fg(PEER_OFFLINE)),
+                Span::styled("● ", Style::default().fg(theme::dim_purple())),
                 Span::styled(format!("{} offline   ", offline_count), theme::dim()),
-                Span::styled("● ", Style::default().fg(INFRA)),
+                Span::styled("● ", Style::default().fg(theme::lavender())),
                 Span::styled(format!("{} infra   ", infra_count), theme::dim()),
                 Span::styled(format!("({} total)", total), theme::dim()),
             ]),

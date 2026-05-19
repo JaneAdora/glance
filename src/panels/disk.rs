@@ -104,10 +104,7 @@ impl Panel for DiskPanel {
 
     fn render(&self, f: &mut Frame, area: Rect) {
         if self.mounts.is_empty() {
-            f.render_widget(
-                ratatui::widgets::Paragraph::new("(no mounts)").style(theme::dim()),
-                area,
-            );
+            f.render_widget(crate::widgets::empty("no mounts"), area);
             return;
         }
         let constraints: Vec<Constraint> = self

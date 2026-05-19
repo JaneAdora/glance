@@ -286,7 +286,7 @@ impl Panel for CommitsPanel {
                     let x = (week_idx as f64) * 2.0;
                     let y = 13.0 - (dow as f64) * 2.0;
                     let color = if n == 0 {
-                        Color::Rgb(0x2a, 0x20, 0x40)
+                        theme::shadow()
                     } else {
                         let ratio = (n as f64 / max_count.max(1) as f64).clamp(0.1, 1.0);
                         let r = (0xc5 as f64 * (1.0 - ratio) + 0xff as f64 * ratio) as u8;

@@ -1,9 +1,11 @@
 mod app;
+mod brightness;
 mod footer;
 mod header;
 mod layout;
 mod panels;
 mod theme;
+mod widgets;
 
 use anyhow::Result;
 

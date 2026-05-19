@@ -13,10 +13,6 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use sysinfo::{CpuRefreshKind, RefreshKind, System};
 
-const BODY_COLOR: Color = Color::Rgb(0xe8, 0x8b, 0x9f); // PINK
-const ACCENT_COLOR: Color = Color::Rgb(0xff, 0x6e, 0xc7); // MAGENTA (cheeks)
-const FACE_COLOR: Color = Color::Rgb(0x40, 0x28, 0x60); // dark purple eyes/mouth
-const SHADOW_COLOR: Color = Color::Rgb(0xc5, 0xa3, 0xff); // LAVENDER (subtle shadow under pet)
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mood {
@@ -247,30 +243,30 @@ impl Panel for PetPanel {
                 if !shadow.is_empty() {
                     ctx.draw(&Points {
                         coords: &shadow,
-                        color: SHADOW_COLOR,
+                        color: theme::lavender(),
                     });
                 }
                 ctx.layer();
                 ctx.draw(&Points {
                     coords: &body,
-                    color: BODY_COLOR,
+                    color: theme::pink(),
                 });
                 ctx.layer();
                 if !accent.is_empty() {
                     ctx.draw(&Points {
                         coords: &accent,
-                        color: ACCENT_COLOR,
+                        color: theme::magenta(),
                     });
                 }
                 ctx.draw(&Points {
                     coords: &eyes,
-                    color: FACE_COLOR,
+                    color: theme::face(),
                 });
                 if !zzz.is_empty() {
                     ctx.layer();
                     ctx.draw(&Points {
                         coords: &zzz,
-                        color: SHADOW_COLOR,
+                        color: theme::lavender(),
                     });
                 }
             });

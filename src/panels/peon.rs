@@ -124,10 +124,7 @@ impl Panel for PeonPanel {
 
         let exercises: Vec<&str> = self.goals.keys().map(|s| s.as_str()).collect();
         if exercises.is_empty() {
-            f.render_widget(
-                Paragraph::new("(no exercises configured)").style(theme::dim()),
-                area,
-            );
+            f.render_widget(crate::widgets::empty("no exercises configured"), area);
             return;
         }
 
