@@ -161,7 +161,7 @@ fn time_row(
     row: usize,
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
-    let time_style = theme::now();
+    let time_style = Style::default().fg(theme::magenta());
     let hour_style = time_style;
     let min_style = time_style;
     let sec_style = time_style;
