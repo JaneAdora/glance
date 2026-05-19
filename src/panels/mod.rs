@@ -8,6 +8,7 @@ pub mod net;
 pub mod peon;
 pub mod ping;
 pub mod temp;
+pub mod tsmap;
 
 use ratatui::layout::Rect;
 use ratatui::Frame;
@@ -34,6 +35,7 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(commits::CommitsPanel::new()),
         Box::new(peon::PeonPanel::new()),
         Box::new(temp::TempPanel::new()),
+        Box::new(tsmap::TsMapPanel::new()),
         Box::new(moon::MoonPanel::new()),
     ]
 }
