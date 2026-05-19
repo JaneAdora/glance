@@ -3,6 +3,7 @@ pub mod commits;
 pub mod cpu;
 pub mod disk;
 pub mod mem;
+pub mod moon;
 pub mod net;
 pub mod peon;
 pub mod ping;
@@ -19,15 +20,18 @@ pub trait Panel {
     }
 }
 
+// Default registry: cpu, mem, net, disk, ping, commits, peon, moon.
+// `battery` is intentionally NOT registered here — this machine has no battery.
+// To enable on a laptop, add `Box::new(battery::BatteryPanel::new()),` after disk.
 pub fn default_registry() -> Vec<Box<dyn Panel>> {
     vec![
         Box::new(cpu::CpuPanel::new()),
         Box::new(mem::MemPanel::new()),
         Box::new(net::NetPanel::new()),
         Box::new(disk::DiskPanel::new()),
-        Box::new(battery::BatteryPanel::new()),
         Box::new(ping::PingPanel::new()),
         Box::new(commits::CommitsPanel::new()),
         Box::new(peon::PeonPanel::new()),
+        Box::new(moon::MoonPanel::new()),
     ]
 }
