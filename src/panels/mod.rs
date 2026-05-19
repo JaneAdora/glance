@@ -1,4 +1,5 @@
 pub mod battery;
+pub mod alerts;
 pub mod clock;
 pub mod commits;
 pub mod cpu;
@@ -11,6 +12,10 @@ pub mod pet;
 pub mod ping;
 pub mod temp;
 pub mod tsmap;
+pub mod hurricane;
+pub mod mascot;
+pub mod solar;
+pub mod water;
 pub mod weather;
 
 use ratatui::layout::Rect;
@@ -48,5 +53,10 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(moon::MoonPanel::new()),
         Box::new(clock::ClockPanel::new()),
         Box::new(weather::WeatherPanel::new()),
+        Box::new(alerts::AlertsPanel::new()),
+        Box::new(hurricane::HurricanePanel::new()),
+        Box::new(solar::SolarPanel::new()),
+        Box::new(water::WaterPanel::new()),
+        Box::new(mascot::MascotPanel::new()),
     ]
 }
