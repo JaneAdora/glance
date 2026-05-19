@@ -161,11 +161,10 @@ fn time_row(
     row: usize,
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
-    let hour_style = Style::default()
-        .fg(theme::magenta())
-        .add_modifier(ratatui::style::Modifier::BOLD);
-    let min_style = Style::default().fg(theme::pink());
-    let sec_style = theme::historical();
+    let time_style = theme::now();
+    let hour_style = time_style;
+    let min_style = time_style;
+    let sec_style = time_style;
     let colon_style = theme::dim();
 
     let hour_str = format!("{:02}", hour);
@@ -302,15 +301,10 @@ impl Panel for ClockPanel {
             self.day,
             self.year
         );
-        let mut date_spans = vec![Span::styled(
-            date_line_text,
-            Style::default()
-                .fg(theme::pink())
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )];
+        let mut date_spans = vec![Span::styled(date_line_text, theme::now())];
         if !self.format_24h {
             date_spans.push(Span::raw("  "));
-            date_spans.push(Span::styled(self.am_pm(), theme::pane_header_focused()));
+            date_spans.push(Span::styled(self.am_pm(), theme::now()));
         }
         f.render_widget(
             Paragraph::new(Line::from(date_spans)).alignment(Alignment::Center),
