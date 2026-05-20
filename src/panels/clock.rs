@@ -246,7 +246,8 @@ impl Panel for ClockPanel {
         }
         if show_progress {
             constraints.push(Constraint::Length(1)); // small gap
-            constraints.push(Constraint::Length(1)); // gauge
+            constraints.push(Constraint::Length(1)); // day-progress label
+            constraints.push(Constraint::Length(1)); // gauge bar
         }
 
         let chunks = Layout::default()
@@ -331,19 +332,23 @@ impl Panel for ClockPanel {
         }
 
         if show_progress {
-            // Skip the gap chunk before the gauge
-            let gauge_idx = next_idx + 1;
+            // Centered "day progress XX%" label, grouped with the metadata
+            // above, then a clean progress bar (chunks: gap, label, bar).
+            let label_idx = next_idx + 1;
+            let gauge_idx = next_idx + 2;
             let day_pct = ((self.seconds_into_day as f64 / 86400.0) * 100.0).round() as u16;
+            let label = Line::from(vec![
+                Span::styled("day progress  ", theme::dim()),
+                Span::styled(format!("{day_pct}%"), theme::historical()),
+            ]);
+            f.render_widget(
+                Paragraph::new(label).alignment(Alignment::Center),
+                chunks[label_idx],
+            );
             let gauge = Gauge::default()
-                .block(
-                    Block::default()
-                        .borders(Borders::NONE)
-                        .title(Line::from(vec![
-                            Span::styled(" day progress  ", theme::dim()),
-                            Span::styled(format!("{day_pct}%"), theme::historical()),
-                        ])),
-                )
+                .block(Block::default().borders(Borders::NONE))
                 .gauge_style(Style::default().fg(theme::magenta()))
+                .label("")
                 .percent(day_pct);
             f.render_widget(gauge, chunks[gauge_idx]);
         }
