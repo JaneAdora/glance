@@ -1,6 +1,6 @@
 use crate::panels::Panel;
 use crate::theme;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
@@ -108,9 +108,10 @@ impl Panel for MoonPanel {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1), // 0: title (TOP)
-                Constraint::Fill(1),   // 1: spacer (top third)
-                Constraint::Fill(2),   // 2: disc (bottom two-thirds)
-                Constraint::Length(2), // 3: stats (BOTTOM)
+                Constraint::Fill(1),   // 1: spacer (above)
+                Constraint::Fill(2),   // 2: disc
+                Constraint::Length(1), // 3: caption (fixed under disc)
+                Constraint::Fill(1),   // 4: spacer (below)
             ])
             .split(area);
 
@@ -173,7 +174,7 @@ impl Panel for MoonPanel {
         let next_in = next_phase_in_days(self.phase);
         let stats = Line::from(vec![
             Span::styled(
-                format!("  {:.0}% lit", self.illumination * 100.0),
+                format!("{:.0}% lit", self.illumination * 100.0),
                 Style::default().fg(theme::pink()),
             ),
             Span::styled("    age ", theme::dim()),
@@ -184,7 +185,10 @@ impl Panel for MoonPanel {
                 theme::historical(),
             ),
         ]);
-        f.render_widget(Paragraph::new(stats), chunks[3]);
+        f.render_widget(
+            Paragraph::new(stats).alignment(Alignment::Center),
+            chunks[3],
+        );
     }
 }
 

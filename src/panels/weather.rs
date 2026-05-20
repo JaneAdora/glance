@@ -359,6 +359,7 @@ impl Panel for WeatherPanel {
                 Constraint::Length(1), // 7: sunrise / sunset
                 Constraint::Length(1), // 8: gap
                 Constraint::Length(2), // 9: 7-day forecast (2 rows: day/glyph then high/low)
+                Constraint::Length(1), // 10: bottom padding (breathing room above footer)
             ])
             .split(area);
 
