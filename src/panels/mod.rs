@@ -52,7 +52,7 @@ pub trait Panel {
 /// `battery` is appended last and excluded from the default registry (no battery
 /// on the dev box) but remains buildable by name from a config file.
 pub const DEFAULT_ORDER: &[&str] = &[
-    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
+    "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "peon", "prs", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
     "timer", "music", "pet", "moon", "mascot", "starfield", "mandala",

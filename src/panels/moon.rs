@@ -106,8 +106,20 @@ impl Panel for MoonPanel {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(65), Constraint::Min(4)])
+            .constraints([
+                Constraint::Length(1), // 0: title (TOP)
+                Constraint::Fill(1),   // 1: spacer (top third)
+                Constraint::Fill(2),   // 2: disc (bottom two-thirds)
+                Constraint::Length(2), // 3: stats (BOTTOM)
+            ])
             .split(area);
+
+        // Title pinned to the top.
+        let title = Line::from(vec![
+            Span::styled(format!(" {} ", self.glyph), theme::pane_header_focused()),
+            Span::styled(self.name.to_string(), theme::pane_header()),
+        ]);
+        f.render_widget(Paragraph::new(title), chunks[0]);
 
         let phase = self.phase;
         let waxing = phase < 0.5;
@@ -135,14 +147,9 @@ impl Panel for MoonPanel {
             }
         }
 
-        let canvas_block = Block::default()
-            .borders(Borders::NONE)
-            .title(Line::from(Span::styled(
-                format!(" {} {} ", self.glyph, self.name),
-                theme::pane_header_focused(),
-            )));
-        let inner = canvas_block.inner(chunks[0]);
-        f.render_widget(canvas_block, chunks[0]);
+        let canvas_block = Block::default().borders(Borders::NONE);
+        let inner = canvas_block.inner(chunks[2]);
+        f.render_widget(canvas_block, chunks[2]);
 
         let (xb, yb) = braille_aspect_bounds(inner, 1.15, 1.15);
         let canvas = Canvas::default()
@@ -164,29 +171,20 @@ impl Panel for MoonPanel {
 
         // Stats block below.
         let next_in = next_phase_in_days(self.phase);
-        let stats = vec![
-            Line::from(vec![
-                Span::styled(format!("  {} ", self.glyph), theme::pane_header_focused()),
-                Span::styled(format!("{}", self.name), theme::pane_header()),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    format!("  {:.0}% lit", self.illumination * 100.0),
-                    Style::default().fg(theme::pink()),
-                ),
-                Span::styled("    age ", theme::dim()),
-                Span::styled(
-                    format!("{:.1} d", self.age_days),
-                    theme::historical(),
-                ),
-                Span::styled("    next ", theme::dim()),
-                Span::styled(
-                    format!("{} in {:.1} d", next_in.0, next_in.1),
-                    theme::historical(),
-                ),
-            ]),
-        ];
-        f.render_widget(Paragraph::new(stats), chunks[1]);
+        let stats = Line::from(vec![
+            Span::styled(
+                format!("  {:.0}% lit", self.illumination * 100.0),
+                Style::default().fg(theme::pink()),
+            ),
+            Span::styled("    age ", theme::dim()),
+            Span::styled(format!("{:.1} d", self.age_days), theme::historical()),
+            Span::styled("    next ", theme::dim()),
+            Span::styled(
+                format!("{} in {:.1} d", next_in.0, next_in.1),
+                theme::historical(),
+            ),
+        ]);
+        f.render_widget(Paragraph::new(stats), chunks[3]);
     }
 }
 

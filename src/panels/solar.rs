@@ -131,9 +131,10 @@ impl Panel for SolarPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1), // title
-                Constraint::Min(5),    // canvas
-                Constraint::Length(2), // legend / times
+                Constraint::Length(1), // 0: title (TOP)
+                Constraint::Fill(1),   // 1: spacer (top third)
+                Constraint::Fill(2),   // 2: canvas arc (bottom two-thirds)
+                Constraint::Length(2), // 3: legend / times (BOTTOM)
             ])
             .split(area);
 
@@ -147,8 +148,8 @@ impl Panel for SolarPanel {
         let canvas_block = Block::default()
             .borders(Borders::BOTTOM)
             .border_style(theme::dim());
-        let inner = canvas_block.inner(chunks[1]);
-        f.render_widget(canvas_block, chunks[1]);
+        let inner = canvas_block.inner(chunks[2]);
+        f.render_widget(canvas_block, chunks[2]);
 
         // Project the sun's path: a semicircle from sunrise (west: x=-1, y=0) to
         // sunset (east: x=+1, y=0), peaking at solar noon (y=+1). Use cos
@@ -293,7 +294,7 @@ impl Panel for SolarPanel {
         ];
         f.render_widget(
             Paragraph::new(legend).alignment(Alignment::Center),
-            chunks[2],
+            chunks[3],
         );
     }
 }
