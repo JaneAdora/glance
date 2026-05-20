@@ -3,8 +3,7 @@ use crate::theme;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::canvas::{Canvas, Rectangle};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -118,6 +117,25 @@ fn scan_all_repos() -> HashMap<String, u32> {
 
 fn ymd(date: chrono_lite::Date) -> String {
     format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+}
+
+/// Interpolate the contribution color from lavender (low) to magenta (high).
+fn grad(ratio: f64) -> Color {
+    let ratio = ratio.clamp(0.0, 1.0);
+    let r = (0xc5 as f64 * (1.0 - ratio) + 0xff as f64 * ratio) as u8;
+    let g = (0xa3 as f64 * (1.0 - ratio) + 0x6e as f64 * ratio) as u8;
+    let b = (0xff as f64 * (1.0 - ratio) + 0xc7 as f64 * ratio) as u8;
+    Color::Rgb(r, g, b)
+}
+
+/// Cell color for a day's commit count; empty days use the dim shadow swatch.
+fn heat_color(n: u32, max: u32) -> Color {
+    if n == 0 {
+        theme::shadow()
+    } else {
+        let ratio = (n as f64 / max.max(1) as f64).clamp(0.15, 1.0);
+        grad(ratio)
+    }
 }
 
 // Tiny date math without pulling in chrono
@@ -258,51 +276,54 @@ impl Panel for CommitsPanel {
             let total: u32 = self.counts.values().sum();
             format!(" commits (last 90 days) — {} total ", total)
         };
-        let block = Block::default()
-            .borders(Borders::NONE)
-            .title(Line::from(Span::styled(title, theme::pane_header())));
-        let inner = block.inner(area);
-        f.render_widget(block, area);
+        let mut lines: Vec<Line> =
+            vec![Line::from(Span::styled(title, theme::pane_header()))];
 
         if max_count == 0 && self.counts.is_empty() {
-            f.render_widget(
-                Paragraph::new(if self.loading {
+            lines.push(Line::from(Span::styled(
+                if self.loading {
                     "(scanning ~/projects + ~/Projects…)"
                 } else {
                     "(no commits found; set $WT_ROOTS to point at your repos)"
-                })
-                .style(theme::dim()),
-                inner,
-            );
+                },
+                theme::dim(),
+            )));
+            f.render_widget(Paragraph::new(lines), area);
             return;
         }
 
-        let canvas = Canvas::default()
-            .x_bounds([0.0, (weeks * 2) as f64])
-            .y_bounds([0.0, 14.0])
-            .marker(ratatui::symbols::Marker::HalfBlock)
-            .paint(move |ctx| {
-                for &(week_idx, dow, n) in &cells {
-                    let x = (week_idx as f64) * 2.0;
-                    let y = 13.0 - (dow as f64) * 2.0;
-                    let color = if n == 0 {
-                        theme::shadow()
-                    } else {
-                        let ratio = (n as f64 / max_count.max(1) as f64).clamp(0.1, 1.0);
-                        let r = (0xc5 as f64 * (1.0 - ratio) + 0xff as f64 * ratio) as u8;
-                        let g = (0xa3 as f64 * (1.0 - ratio) + 0x6e as f64 * ratio) as u8;
-                        let b = (0xff as f64 * (1.0 - ratio) + 0xc7 as f64 * ratio) as u8;
-                        Color::Rgb(r, g, b)
-                    };
-                    ctx.draw(&Rectangle {
-                        x,
-                        y,
-                        width: 1.8,
-                        height: 1.6,
-                        color,
-                    });
-                }
-            });
-        f.render_widget(canvas, inner);
+        // Reshape the cells into a 7 (Sun..Sat) x weeks grid of counts.
+        let mut grid = vec![vec![0u32; weeks]; 7];
+        for &(w, dow, n) in &cells {
+            if (dow as usize) < 7 && w < weeks {
+                grid[dow as usize][w] = n;
+            }
+        }
+
+        // GitHub-style heatmap of filled cells, with Mon/Wed/Fri row labels.
+        let row_labels = ["   ", "Mon", "   ", "Wed", "   ", "Fri", "   "];
+        lines.push(Line::from(""));
+        for (dow, label) in row_labels.iter().enumerate() {
+            let mut spans: Vec<Span> = vec![Span::styled(format!("{label} "), theme::dim())];
+            for w in 0..weeks {
+                let color = heat_color(grid[dow][w], max_count);
+                spans.push(Span::styled("██", Style::default().fg(color)));
+                spans.push(Span::raw(" "));
+            }
+            lines.push(Line::from(spans));
+        }
+
+        // Legend: less ██ ██ ██ ██ ██ more
+        let mut legend: Vec<Span> = vec![Span::raw("    "), Span::styled("less ", theme::dim())];
+        for &lvl in &[0.0f64, 0.25, 0.5, 0.75, 1.0] {
+            let c = if lvl == 0.0 { theme::shadow() } else { grad(lvl) };
+            legend.push(Span::styled("██", Style::default().fg(c)));
+            legend.push(Span::raw(" "));
+        }
+        legend.push(Span::styled("more", theme::dim()));
+        lines.push(Line::from(""));
+        lines.push(Line::from(legend));
+
+        f.render_widget(Paragraph::new(lines), area);
     }
 }
