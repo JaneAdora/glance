@@ -4,6 +4,7 @@ pub mod clock;
 pub mod commits;
 pub mod cpu;
 pub mod disk;
+pub mod conn;
 pub mod entropy;
 pub mod fans;
 pub mod mem;
@@ -13,9 +14,12 @@ pub mod peon;
 pub mod pet;
 pub mod ping;
 pub mod temp;
+pub mod timer;
 pub mod tsmap;
 pub mod hurricane;
+pub mod io;
 pub mod loadavg;
+pub mod mandala;
 pub mod mascot;
 pub mod solar;
 pub mod starfield;
@@ -43,18 +47,18 @@ pub trait Panel {
 /// `battery` is appended last and excluded from the default registry (no battery
 /// on the dev box) but remains buildable by name from a config file.
 pub const DEFAULT_ORDER: &[&str] = &[
-    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans",
+    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn",
     "ping", "commits", "peon", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
-    "pet", "moon", "mascot", "starfield",
+    "timer", "pet", "moon", "mascot", "starfield", "mandala",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
 pub const ALL_PANELS: &[&str] = &[
-    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans",
+    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn",
     "ping", "commits", "peon", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
-    "pet", "moon", "mascot", "starfield", "battery",
+    "timer", "pet", "moon", "mascot", "starfield", "mandala", "battery",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -67,6 +71,8 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "loadavg" => Box::new(loadavg::LoadavgPanel::new()),
         "entropy" => Box::new(entropy::EntropyPanel::new()),
         "fans" => Box::new(fans::FansPanel::new()),
+        "io" => Box::new(io::IoPanel::new()),
+        "conn" => Box::new(conn::ConnPanel::new()),
         "ping" => Box::new(ping::PingPanel::new()),
         "commits" => Box::new(commits::CommitsPanel::new()),
         "peon" => Box::new(peon::PeonPanel::new()),
@@ -81,6 +87,8 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "pet" => Box::new(pet::PetPanel::new()),
         "moon" => Box::new(moon::MoonPanel::new()),
         "mascot" => Box::new(mascot::MascotPanel::new()),
+        "timer" => Box::new(timer::TimerPanel::new()),
+        "mandala" => Box::new(mandala::MandalaPanel::new()),
         "starfield" => Box::new(starfield::StarfieldPanel::new()),
         "battery" => Box::new(battery::BatteryPanel::new()),
         _ => return None,
