@@ -142,16 +142,17 @@ impl Panel for WaterPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1), // title (TOP)
-                Constraint::Min(0),    // spacer pushes content to bottom
-                Constraint::Length(1), // gap
-                Constraint::Length(2), // big count line
-                Constraint::Length(1), // gap
-                Constraint::Length(2), // glass row (cups visualized)
-                Constraint::Length(1), // gap
-                Constraint::Length(2), // gauge
-                Constraint::Length(1), // hint
-                Constraint::Length(1), // toast
+                Constraint::Length(1), // 0: title (TOP)
+                Constraint::Min(0),    // 1: flex spacer (centers the block below)
+                Constraint::Length(2), // 2: gauge bar (above the text)
+                Constraint::Length(1), // 3: gap
+                Constraint::Length(2), // 4: big count line
+                Constraint::Length(1), // 5: gap
+                Constraint::Length(2), // 6: glass row (cups visualized)
+                Constraint::Length(1), // 7: gap
+                Constraint::Length(1), // 8: hint
+                Constraint::Length(1), // 9: toast
+                Constraint::Min(0),    // 10: flex spacer (bottom)
             ])
             .split(area);
 
@@ -175,7 +176,7 @@ impl Panel for WaterPanel {
         ]);
         f.render_widget(
             Paragraph::new(big_line).alignment(Alignment::Center),
-            chunks[3],
+            chunks[4],
         );
 
         // Glass row: render each glass as a cup glyph
@@ -193,7 +194,7 @@ impl Panel for WaterPanel {
         }
         f.render_widget(
             Paragraph::new(Line::from(glass_spans)).alignment(Alignment::Center),
-            chunks[5],
+            chunks[6],
         );
 
         // Gauge
@@ -209,7 +210,7 @@ impl Panel for WaterPanel {
             .block(Block::default().borders(Borders::NONE))
             .gauge_style(style)
             .percent(pct);
-        f.render_widget(gauge, chunks[7]);
+        f.render_widget(gauge, chunks[2]);
 
         // Hint
         let hint = Line::from(vec![
