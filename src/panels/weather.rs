@@ -6,7 +6,7 @@ use crate::theme;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use serde::Deserialize;
 use std::process::Command;
@@ -346,6 +346,8 @@ impl Panel for WeatherPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect) {
+        // Forecast height grows as days wrap onto extra rows at narrow widths.
+        let forecast_h = (forecast_rows(area.width, 7) as u16) * 2;
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -358,7 +360,7 @@ impl Panel for WeatherPanel {
                 Constraint::Length(1), // 6: feels-like / humidity / wind / precip
                 Constraint::Length(1), // 7: sunrise / sunset
                 Constraint::Length(1), // 8: gap
-                Constraint::Length(2), // 9: 7-day forecast (2 rows: day/glyph then high/low)
+                Constraint::Length(forecast_h), // 9: 7-day forecast (wraps when narrow)
                 Constraint::Length(1), // 10: bottom padding (breathing room above footer)
             ])
             .split(area);
@@ -463,42 +465,77 @@ impl Panel for WeatherPanel {
     }
 }
 
+const FC_CELL_W: u16 = 11;
+const FC_GAP: u16 = 1;
+
+/// Days-per-row for the forecast at a given width, tightly packed.
+fn forecast_cols(width: u16, n: usize) -> usize {
+    (((width + FC_GAP) / (FC_CELL_W + FC_GAP)) as usize).clamp(1, n.max(1))
+}
+
+/// Stacked rows needed to show `n` forecast days at this width (2 lines each).
+fn forecast_rows(width: u16, n: usize) -> usize {
+    let per = forecast_cols(width, n);
+    n.div_ceil(per)
+}
+
 fn render_forecast(f: &mut Frame, area: Rect, data: &WeatherData) {
     let days = &data.days;
     let n = days.len().min(7);
-    if n == 0 || area.width < 20 {
+    if n == 0 || area.width < FC_CELL_W || area.height < 2 {
         return;
     }
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Ratio(1, n as u32); n])
+    let per_row = forecast_cols(area.width, n);
+    let max_rows = (area.height / 2).max(1) as usize;
+    let rows = forecast_rows(area.width, n).min(max_rows);
+
+    let bands = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Length(2); rows])
         .split(area);
-    for (i, d) in days.iter().take(n).enumerate() {
-        let wd = weekday_from_iso(&d.date);
-        let glyph = code_glyph(d.code, true);
-        let line1 = Line::from(vec![
-            Span::styled(format!("{wd} "), theme::pane_header()),
-            Span::styled(glyph.to_string(), theme::now()),
-        ])
-        .alignment(Alignment::Center);
-        let line2 = Line::from(vec![
-            Span::styled(
-                format!("{:.0}°", d.high_f),
-                Style::default().fg(theme::magenta()),
-            ),
-            Span::styled(" / ", theme::dim()),
-            Span::styled(
-                format!("{:.0}°", d.low_f),
-                theme::historical(),
-            ),
-        ])
-        .alignment(Alignment::Center);
-        let block = Block::default()
-            .borders(Borders::NONE)
-            .style(Style::default());
-        f.render_widget(
-            Paragraph::new(vec![line1, line2]).block(block),
-            cols[i],
-        );
+
+    for (r, band) in bands.iter().enumerate() {
+        let start = r * per_row;
+        if start >= n {
+            break;
+        }
+        let count = (n - start).min(per_row);
+        // Center a tightly packed group of `count` cells in this band.
+        let group_w = count as u16 * FC_CELL_W + (count as u16 - 1) * FC_GAP;
+        let left_pad = band.width.saturating_sub(group_w) / 2;
+        let mut hcons: Vec<Constraint> = Vec::with_capacity(count * 2 + 2);
+        hcons.push(Constraint::Length(left_pad));
+        for c in 0..count {
+            hcons.push(Constraint::Length(FC_CELL_W));
+            if c + 1 < count {
+                hcons.push(Constraint::Length(FC_GAP));
+            }
+        }
+        hcons.push(Constraint::Min(0));
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(hcons)
+            .split(*band);
+
+        for c in 0..count {
+            let d = &days[start + c];
+            let wd = weekday_from_iso(&d.date);
+            let glyph = code_glyph(d.code, true);
+            let line1 = Line::from(vec![
+                Span::styled(format!("{wd} "), theme::pane_header()),
+                Span::styled(glyph.to_string(), theme::now()),
+            ])
+            .alignment(Alignment::Center);
+            let line2 = Line::from(vec![
+                Span::styled(
+                    format!("{:.0}\u{b0}", d.high_f),
+                    Style::default().fg(theme::magenta()),
+                ),
+                Span::styled(" / ", theme::dim()),
+                Span::styled(format!("{:.0}\u{b0}", d.low_f), theme::historical()),
+            ])
+            .alignment(Alignment::Center);
+            f.render_widget(Paragraph::new(vec![line1, line2]), cols[1 + c * 2]);
+        }
     }
 }
