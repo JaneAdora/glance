@@ -4,6 +4,8 @@ pub mod clock;
 pub mod commits;
 pub mod cpu;
 pub mod disk;
+pub mod entropy;
+pub mod fans;
 pub mod mem;
 pub mod moon;
 pub mod net;
@@ -13,8 +15,10 @@ pub mod ping;
 pub mod temp;
 pub mod tsmap;
 pub mod hurricane;
+pub mod loadavg;
 pub mod mascot;
 pub mod solar;
+pub mod starfield;
 pub mod water;
 pub mod weather;
 
@@ -44,6 +48,9 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(mem::MemPanel::new()),
         Box::new(net::NetPanel::new()),
         Box::new(disk::DiskPanel::new()),
+        Box::new(loadavg::LoadavgPanel::new()),
+        Box::new(entropy::EntropyPanel::new()),
+        Box::new(fans::FansPanel::new()),
         Box::new(ping::PingPanel::new()),
         Box::new(commits::CommitsPanel::new()),
         Box::new(peon::PeonPanel::new()),
@@ -58,5 +65,6 @@ pub fn default_registry() -> Vec<Box<dyn Panel>> {
         Box::new(solar::SolarPanel::new()),
         Box::new(water::WaterPanel::new()),
         Box::new(mascot::MascotPanel::new()),
+        Box::new(starfield::StarfieldPanel::new()),
     ]
 }
