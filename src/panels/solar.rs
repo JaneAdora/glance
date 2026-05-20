@@ -151,9 +151,12 @@ impl Panel for SolarPanel {
         let inner = canvas_block.inner(chunks[2]);
         f.render_widget(canvas_block, chunks[2]);
 
-        // Project the sun's path: a semicircle from sunrise (west: x=-1, y=0) to
-        // sunset (east: x=+1, y=0), peaking at solar noon (y=+1). Use cos
-        // parameterization: t in [0, 1] from sunrise to sunset.
+        // Project the sun's path: a semicircle from sunrise (west) to sunset
+        // (east), peaking at solar noon. The raw dome lives in y in [0, 1], but
+        // braille_aspect_bounds centers the view box on the origin, so shift the
+        // whole scene down by Y0 to straddle y=0: horizon lands at -Y0 (bottom),
+        // apex at +Y0 (top). Avoids clipping the dome's crown.
+        const Y0: f64 = 0.5;
         let day_len = (self.sunset_secs - self.sunrise_secs).max(1);
         let now_frac = if self.now_secs <= self.sunrise_secs {
             -0.05_f64
@@ -170,7 +173,7 @@ impl Panel for SolarPanel {
             let t = i as f64 / n as f64;
             let theta = (1.0 - t) * PI; // PI at sunrise, 0 at sunset
             let x = -theta.cos();       // -1 at sunrise to +1 at sunset
-            let y = theta.sin();
+            let y = theta.sin() - Y0;
             // Mark golden hour as the first/last 12% of the daylight arc
             if t < 0.12 || t > 0.88 {
                 golden_pts.push((x, y));
@@ -183,14 +186,14 @@ impl Panel for SolarPanel {
         let mut horizon: Vec<(f64, f64)> = Vec::with_capacity(60);
         let mut x = -1.1f64;
         while x <= 1.1 {
-            horizon.push((x, 0.0));
+            horizon.push((x, -Y0));
             x += 0.04;
         }
 
         // Sun position
         let sun_pt = if (0.0..=1.0).contains(&now_frac) {
             let theta = (1.0 - now_frac) * PI;
-            Some((-theta.cos(), theta.sin()))
+            Some((-theta.cos(), theta.sin() - Y0))
         } else {
             None
         };
@@ -215,15 +218,15 @@ impl Panel for SolarPanel {
 
         // Sunrise/sunset endpoint markers (tick crosses)
         let endpoint_marks: Vec<(f64, f64)> = vec![
-            (-1.0, 0.0),
-            (-1.0, 0.05),
-            (-1.0, -0.05),
-            (1.0, 0.0),
-            (1.0, 0.05),
-            (1.0, -0.05),
+            (-1.0, -Y0),
+            (-1.0, -Y0 + 0.05),
+            (-1.0, -Y0 - 0.05),
+            (1.0, -Y0),
+            (1.0, -Y0 + 0.05),
+            (1.0, -Y0 - 0.05),
         ];
 
-        let (xb, yb) = braille_aspect_bounds(inner, 1.15, 0.65);
+        let (xb, yb) = braille_aspect_bounds(inner, 1.12, 0.58);
         let canvas = Canvas::default()
             .marker(Marker::Braille)
             .x_bounds(xb)
