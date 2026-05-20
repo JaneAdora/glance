@@ -217,14 +217,13 @@ impl Panel for TimerPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // flex top
-                Constraint::Length(1), // title
+                Constraint::Length(1), // title (TOP)
+                Constraint::Min(0),    // spacer pushes content to bottom
                 Constraint::Length(1), // gap
                 Constraint::Length(7), // ring + digits area
                 Constraint::Length(1), // status label
                 Constraint::Length(1), // gap
                 Constraint::Length(1), // hint
-                Constraint::Min(0),    // flex bottom
             ])
             .split(area);
 
@@ -237,7 +236,7 @@ impl Panel for TimerPanel {
             Span::styled(format!("[{mode_label}]"), theme::pane_header_focused()),
             Span::styled(format!("   {} done today", self.completed), theme::dim()),
         ]);
-        f.render_widget(Paragraph::new(title), chunks[1]);
+        f.render_widget(Paragraph::new(title), chunks[0]);
 
         // Ring (Canvas) behind, digits (Paragraph) overlaid centered.
         let ring_area = chunks[3];

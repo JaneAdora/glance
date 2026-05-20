@@ -198,14 +198,12 @@ impl Panel for MascotPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // flex top
-                Constraint::Length(1), // title chip
-                Constraint::Length(1), // gap
-                Constraint::Min(8),    // canvas (mascot)
-                Constraint::Length(1), // caption
-                Constraint::Length(1), // gap
-                Constraint::Length(1), // hint
-                Constraint::Min(0),    // flex bottom
+                Constraint::Length(1), // 0: title chip (TOP)
+                Constraint::Length(1), // 1: gap
+                Constraint::Min(8),    // 2: canvas (mascot) fills
+                Constraint::Length(1), // 3: caption
+                Constraint::Length(1), // 4: gap
+                Constraint::Length(1), // 5: hint (BOTTOM)
             ])
             .split(area);
 
@@ -213,11 +211,11 @@ impl Panel for MascotPanel {
             Span::styled(" mascot ", theme::pane_header()),
             Span::styled(format!("[{}]", pose.name), theme::pane_header_focused()),
         ]);
-        f.render_widget(Paragraph::new(title), chunks[1]);
+        f.render_widget(Paragraph::new(title), chunks[0]);
 
         let canvas_block = Block::default().borders(Borders::NONE);
-        let inner = canvas_block.inner(chunks[3]);
-        f.render_widget(canvas_block, chunks[3]);
+        let inner = canvas_block.inner(chunks[2]);
+        f.render_widget(canvas_block, chunks[2]);
 
         let (body, accent, face) = pose_layers(pose);
 
@@ -254,7 +252,7 @@ impl Panel for MascotPanel {
         let caption = Line::from(Span::styled(pose.caption, theme::now()));
         f.render_widget(
             Paragraph::new(caption).alignment(Alignment::Center),
-            chunks[4],
+            chunks[3],
         );
 
         let hint = Line::from(Span::styled(
@@ -264,6 +262,6 @@ impl Panel for MascotPanel {
             ),
             theme::dim(),
         ));
-        f.render_widget(Paragraph::new(hint).alignment(Alignment::Center), chunks[6]);
+        f.render_widget(Paragraph::new(hint).alignment(Alignment::Center), chunks[5]);
     }
 }

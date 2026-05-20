@@ -89,15 +89,14 @@ impl Panel for MusicPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // flex top
-                Constraint::Length(1), // title chip
+                Constraint::Length(1), // title chip (TOP)
+                Constraint::Min(0),    // spacer pushes content to bottom
                 Constraint::Length(1), // gap
                 Constraint::Length(1), // track title
                 Constraint::Length(1), // artist
                 Constraint::Length(1), // album
                 Constraint::Length(1), // gap
                 Constraint::Length(2), // progress
-                Constraint::Min(0),    // flex bottom
             ])
             .split(area);
 
@@ -111,7 +110,7 @@ impl Panel for MusicPanel {
             Span::styled(" music ", theme::pane_header()),
             Span::styled(format!("{glyph} {}", self.status), theme::pane_header_focused()),
         ]);
-        f.render_widget(Paragraph::new(title), chunks[1]);
+        f.render_widget(Paragraph::new(title), chunks[0]);
 
         if self.status == "(none)" || self.title.is_empty() {
             f.render_widget(

@@ -234,8 +234,8 @@ impl Panel for ClockPanel {
         // Flex top + bottom both Min(0) so the whole content block floats vertically centered
         // in the panel area instead of hugging the top nav.
         let mut constraints: Vec<Constraint> = vec![
-            Constraint::Min(0),       // 0: flex top
-            Constraint::Length(1),    // 1: title bar
+            Constraint::Length(1),    // 0: title bar (TOP)
+            Constraint::Min(0),       // 1: spacer pushes content to bottom
             Constraint::Length(1),    // 2: gap
             Constraint::Length(5),    // 3: big clock
             Constraint::Length(1),    // 4: gap
@@ -248,7 +248,6 @@ impl Panel for ClockPanel {
             constraints.push(Constraint::Length(1)); // small gap
             constraints.push(Constraint::Length(1)); // gauge
         }
-        constraints.push(Constraint::Min(0)); // flex bottom
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -256,7 +255,7 @@ impl Panel for ClockPanel {
             .split(area);
 
         // Indices into chunks (skip leading flex top at index 0)
-        let i_title = 1;
+        let i_title = 0;
         let i_clock = 3;
         let i_date = 5;
 

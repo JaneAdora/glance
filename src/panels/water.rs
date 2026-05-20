@@ -142,8 +142,8 @@ impl Panel for WaterPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // flex top
-                Constraint::Length(1), // title
+                Constraint::Length(1), // title (TOP)
+                Constraint::Min(0),    // spacer pushes content to bottom
                 Constraint::Length(1), // gap
                 Constraint::Length(2), // big count line
                 Constraint::Length(1), // gap
@@ -152,7 +152,6 @@ impl Panel for WaterPanel {
                 Constraint::Length(2), // gauge
                 Constraint::Length(1), // hint
                 Constraint::Length(1), // toast
-                Constraint::Min(0),    // flex bottom
             ])
             .split(area);
 
@@ -161,7 +160,7 @@ impl Panel for WaterPanel {
             Span::styled(self.state.date.clone(), theme::pane_header_focused()),
             Span::styled(format!("   goal {}/day", self.goal), theme::dim()),
         ]);
-        f.render_widget(Paragraph::new(title), chunks[1]);
+        f.render_widget(Paragraph::new(title), chunks[0]);
 
         // Big "N / GOAL" line — bright pink number, lavender denominator
         let big_line = Line::from(vec![

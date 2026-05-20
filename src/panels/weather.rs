@@ -349,8 +349,8 @@ impl Panel for WeatherPanel {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // 0: flex top
-                Constraint::Length(1), // 1: title chip
+                Constraint::Length(1), // 0: title chip (TOP)
+                Constraint::Min(0),    // 1: spacer pushes content to bottom
                 Constraint::Length(1), // 2: gap
                 Constraint::Length(5), // 3: big temperature block
                 Constraint::Length(1), // 4: gap
@@ -359,7 +359,6 @@ impl Panel for WeatherPanel {
                 Constraint::Length(1), // 7: sunrise / sunset
                 Constraint::Length(1), // 8: gap
                 Constraint::Length(2), // 9: 7-day forecast (2 rows: day/glyph then high/low)
-                Constraint::Min(0),    // 10: flex bottom
             ])
             .split(area);
 
@@ -375,7 +374,7 @@ impl Panel for WeatherPanel {
                 theme::dim(),
             ),
         ]);
-        f.render_widget(Paragraph::new(title_line), chunks[1]);
+        f.render_widget(Paragraph::new(title_line), chunks[0]);
 
         let data = match &self.data {
             Some(d) => d,
