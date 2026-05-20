@@ -13,18 +13,23 @@ pub mod net;
 pub mod peon;
 pub mod pet;
 pub mod ping;
+pub mod prs;
 pub mod temp;
 pub mod timer;
+pub mod traceroute;
 pub mod tsmap;
+pub mod gpu;
 pub mod hurricane;
 pub mod io;
 pub mod loadavg;
 pub mod mandala;
 pub mod mascot;
+pub mod music;
 pub mod solar;
 pub mod starfield;
 pub mod water;
 pub mod weather;
+pub mod world_ping;
 
 use ratatui::layout::Rect;
 use ratatui::Frame;
@@ -47,18 +52,18 @@ pub trait Panel {
 /// `battery` is appended last and excluded from the default registry (no battery
 /// on the dev box) but remains buildable by name from a config file.
 pub const DEFAULT_ORDER: &[&str] = &[
-    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn",
-    "ping", "commits", "peon", "temp", "tsmap",
+    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
+    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
-    "timer", "pet", "moon", "mascot", "starfield", "mandala",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
 pub const ALL_PANELS: &[&str] = &[
-    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn",
-    "ping", "commits", "peon", "temp", "tsmap",
+    "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
+    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
-    "timer", "pet", "moon", "mascot", "starfield", "mandala", "battery",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -73,7 +78,11 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "fans" => Box::new(fans::FansPanel::new()),
         "io" => Box::new(io::IoPanel::new()),
         "conn" => Box::new(conn::ConnPanel::new()),
+        "gpu" => Box::new(gpu::GpuPanel::new()),
         "ping" => Box::new(ping::PingPanel::new()),
+        "world-ping" => Box::new(world_ping::WorldPingPanel::new()),
+        "traceroute" => Box::new(traceroute::TraceroutePanel::new()),
+        "prs" => Box::new(prs::PrsPanel::new()),
         "commits" => Box::new(commits::CommitsPanel::new()),
         "peon" => Box::new(peon::PeonPanel::new()),
         "temp" => Box::new(temp::TempPanel::new()),
@@ -87,6 +96,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "pet" => Box::new(pet::PetPanel::new()),
         "moon" => Box::new(moon::MoonPanel::new()),
         "mascot" => Box::new(mascot::MascotPanel::new()),
+        "music" => Box::new(music::MusicPanel::new()),
         "timer" => Box::new(timer::TimerPanel::new()),
         "mandala" => Box::new(mandala::MandalaPanel::new()),
         "starfield" => Box::new(starfield::StarfieldPanel::new()),
