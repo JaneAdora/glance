@@ -1,5 +1,6 @@
 //! Pure decoration: a slowly twinkling starfield. No data source. Stars sit at
 //! fixed pseudo-random positions and pulse brightness on independent phases.
+use crate::layout::braille_aspect_bounds;
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::Rect;
@@ -76,25 +77,31 @@ impl Panel for StarfieldPanel {
 
         // Partition stars into 3 brightness buckets by their current twinkle value,
         // each drawn in a different palette color so the field shimmers.
+        // Square up the pixels (Braille cells are 2x4) so the scatter is even,
+        // and stretch the [-1,1] star coords across the filled bounds so the
+        // field still covers the whole panel instead of a centered band.
+        let (xb, yb) = braille_aspect_bounds(inner, 1.0, 1.0);
+        let (hx, hy) = (xb[1], yb[1]);
         let mut bright: Vec<(f64, f64)> = Vec::new();
         let mut mid: Vec<(f64, f64)> = Vec::new();
         let mut dim: Vec<(f64, f64)> = Vec::new();
         for s in &self.stars {
             let tw = ((t * s.speed + s.phase * std::f64::consts::TAU).sin() + 1.0) / 2.0; // 0..1
             let level = tw * (0.5 + 0.5 * (s.tier as f64 / 2.0));
+            let p = (s.x * hx, s.y * hy);
             if level > 0.66 {
-                bright.push((s.x, s.y));
+                bright.push(p);
             } else if level > 0.33 {
-                mid.push((s.x, s.y));
+                mid.push(p);
             } else {
-                dim.push((s.x, s.y));
+                dim.push(p);
             }
         }
 
         let canvas = Canvas::default()
             .marker(Marker::Braille)
-            .x_bounds([-1.0, 1.0])
-            .y_bounds([-1.0, 1.0])
+            .x_bounds(xb)
+            .y_bounds(yb)
             .paint(move |ctx| {
                 ctx.draw(&Points {
                     coords: &dim,
