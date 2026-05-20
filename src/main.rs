@@ -1,5 +1,6 @@
 mod app;
 mod brightness;
+mod config;
 mod footer;
 mod header;
 mod layout;
@@ -15,14 +16,18 @@ const HELP: &str = "\
 glance :: multi-panel system + life dashboard
 
 USAGE:
-  glance              Launch dashboard (interactive TTY required).
-  glance --help       Print this message.
-  glance --version    Print version.
+  glance                 Launch dashboard (interactive TTY required).
+  glance --help          Print this message.
+  glance --version       Print version.
+  glance --list-panels   Print every available panel name.
+  glance --write-config  Write a starter ~/.config/glance/panels.toml.
 
-PANELS:
-  cpu, mem (more coming)
+CONFIG:
+  ~/.config/glance/panels.toml controls which panels appear and in what
+  order. First 9 get keys 1-9, the 10th gets key 0, the rest use n/p.
+  Absent config = all panels in the default order.
 
-KEYS: 1-9 jump, n/p cycle, r refresh, ? help, q quit.
+KEYS: 1-9/0 jump, n/p cycle, r refresh, [ ] brightness, ? help, q quit.
 ";
 
 fn main() -> Result<()> {
@@ -37,12 +42,34 @@ fn main() -> Result<()> {
                 println!("glance {VERSION}");
                 return Ok(());
             }
+            "--list-panels" => {
+                for name in panels::ALL_PANELS {
+                    println!("{name}");
+                }
+                return Ok(());
+            }
+            "--write-config" => {
+                match config::write_template(panels::ALL_PANELS, panels::DEFAULT_ORDER) {
+                    Ok(path) => println!("wrote {}", path.display()),
+                    Err(e) => {
+                        eprintln!("glance: could not write config: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                return Ok(());
+            }
             other => {
                 eprintln!("glance: unknown arg: {other}\n\nTry: glance --help");
                 std::process::exit(2);
             }
         }
     }
+
+    // Build registry from config if present, else default order.
+    let registry = match config::load_order() {
+        Some(order) => panels::registry_from_names(&order),
+        None => panels::default_registry(),
+    };
 
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -54,7 +81,6 @@ fn main() -> Result<()> {
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let registry = panels::default_registry();
     let mut state = app::AppState::new(registry);
 
     let result = app::run(&mut terminal, &mut state);
