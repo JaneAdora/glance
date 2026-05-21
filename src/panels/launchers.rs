@@ -23,6 +23,9 @@ const PALETTE: &[(&str, &str, char)] = &[
     ("clip", "clipboard", 'c'),
     ("1p", "1password", 'o'),
     ("proc", "processes", 'P'),
+    ("roam", "directories", 'R'),
+    ("wt", "git worktrees", 'w'),
+    ("recall", "cc sessions", 'l'),
     ("docker", "containers", 'd'),
     ("svc", "services", 's'),
     ("ssh", "hosts", 'h'),
@@ -31,6 +34,7 @@ const PALETTE: &[(&str, &str, char)] = &[
     ("port", "listeners", 't'),
     ("agent", "AI sessions", 'a'),
     ("hub", "hubspot portals", 'b'),
+    ("mm", "miss minutes", 'm'),
 ];
 
 /// Launchers that expose a live glance card, and the binary to call for it.
