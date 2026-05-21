@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 const PALETTE: &[(&str, &str, char)] = &[
     ("gst", "git status/log", 'g'),
     ("clip", "clipboard", 'c'),
-    ("op", "1password", 'o'),
+    ("1p", "1password", 'o'),
     ("proc", "processes", 'p'),
     ("docker", "containers", 'd'),
     ("svc", "services", 's'),
