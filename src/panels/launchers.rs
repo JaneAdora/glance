@@ -10,6 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::process::Command;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -21,11 +22,11 @@ const PALETTE: &[(&str, &str, char)] = &[
     ("gst", "git status/log", 'g'),
     ("clip", "clipboard", 'c'),
     ("1p", "1password", 'o'),
-    ("proc", "processes", 'p'),
+    ("proc", "processes", 'P'),
     ("docker", "containers", 'd'),
     ("svc", "services", 's'),
     ("ssh", "hosts", 'h'),
-    ("note", "journal", 'n'),
+    ("note", "journal", 'N'),
     ("gh", "PR triage", 'G'),
     ("port", "listeners", 't'),
     ("agent", "AI sessions", 'a'),
@@ -45,6 +46,8 @@ pub struct LaunchersPanel {
     tx: mpsc::Sender<(String, Option<String>)>,
     /// launcher names with an in-flight worker, so we never double-spawn.
     inflight: Arc<Mutex<HashSet<String>>>,
+    /// Last command name copied to the clipboard, for a transient toast.
+    copied: Option<(String, Instant)>,
 }
 
 impl LaunchersPanel {
@@ -56,6 +59,7 @@ impl LaunchersPanel {
             rx,
             tx,
             inflight: Arc::new(Mutex::new(HashSet::new())),
+            copied: None,
         }
     }
 
@@ -140,10 +144,13 @@ impl Panel for LaunchersPanel {
             ])
             .split(area);
 
-        f.render_widget(
-            Paragraph::new(Line::from(Span::styled(" launchers", theme::pane_header()))),
-            chunks[0],
-        );
+        let mut title = vec![Span::styled(" launchers", theme::pane_header())];
+        if let Some((name, ts)) = &self.copied {
+            if ts.elapsed() < Duration::from_secs(3) {
+                title.push(Span::styled(format!("   copied: {name}"), theme::now()));
+            }
+        }
+        f.render_widget(Paragraph::new(Line::from(title)), chunks[0]);
 
         let rows: Vec<Line> = PALETTE
             .iter()
@@ -170,5 +177,57 @@ impl Panel for LaunchersPanel {
             })
             .collect();
         f.render_widget(Paragraph::new(card_lines), chunks[3]);
+    }
+
+    fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if let crossterm::event::KeyCode::Char(c) = key.code {
+            if let Some((name, _, _)) = PALETTE.iter().find(|(_, _, k)| *k == c) {
+                copy_command(name);
+                self.copied = Some((name.to_string(), Instant::now()));
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// Put `s` on the clipboard via OSC 52 (reaches the outer terminal over SSH/tmux)
+/// and wl-copy (local Wayland). Best-effort; failures are silent.
+fn copy_command(s: &str) {
+    let seq = format!("\x1b]52;c;{}\x07", b64(s.as_bytes()));
+    let mut out = std::io::stdout();
+    let _ = out.write_all(seq.as_bytes());
+    let _ = out.flush();
+    if let Ok(mut c) = Command::new("wl-copy").stdin(std::process::Stdio::piped()).spawn() {
+        if let Some(mut si) = c.stdin.take() {
+            let _ = si.write_all(s.as_bytes());
+        }
+        let _ = c.wait();
+    }
+}
+
+/// Minimal standard base64 (no line breaks) for OSC 52 payloads.
+fn b64(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        out.push(T[(n >> 18 & 63) as usize] as char);
+        out.push(T[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { T[(n >> 6 & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::b64;
+    #[test]
+    fn b64_matches_known_vectors() {
+        assert_eq!(b64(b"gst"), "Z3N0");
+        assert_eq!(b64(b"clip"), "Y2xpcA==");
+        assert_eq!(b64(b""), "");
     }
 }
