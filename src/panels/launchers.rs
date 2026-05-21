@@ -35,7 +35,7 @@ const PALETTE: &[(&str, &str, char)] = &[
 /// Launchers that expose a live glance card, and the binary to call for it.
 /// (panel name, binary). Wave 1-3 append here as each launcher ships its
 /// `--summary --json` envelope; render()/kick_all() pick them up automatically.
-const CARDS: &[(&str, &str)] = &[("gst", "gst")];
+const CARDS: &[(&str, &str)] = &[("gst", "gst"), ("clip", "clip"), ("proc", "proc")];
 
 pub struct LaunchersPanel {
     /// launcher name -> latest headline. Absent until the first fetch lands.
