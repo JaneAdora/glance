@@ -13,6 +13,7 @@ pub mod net;
 pub mod peon;
 pub mod pet;
 pub mod ping;
+pub mod issues;
 pub mod prs;
 pub mod temp;
 pub mod timer;
@@ -54,7 +55,7 @@ pub trait Panel {
 /// on the dev box) but remains buildable by name from a config file.
 pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
-    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "temp", "tsmap",
+    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
     "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers",
 ];
@@ -62,7 +63,7 @@ pub const DEFAULT_ORDER: &[&str] = &[
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
 pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
-    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "temp", "tsmap",
+    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar", "water",
     "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers",
 ];
@@ -84,6 +85,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "world-ping" => Box::new(world_ping::WorldPingPanel::new()),
         "traceroute" => Box::new(traceroute::TraceroutePanel::new()),
         "prs" => Box::new(prs::PrsPanel::new()),
+        "issues" => Box::new(issues::IssuesPanel::new()),
         "commits" => Box::new(commits::CommitsPanel::new()),
         "peon" => Box::new(peon::PeonPanel::new()),
         "temp" => Box::new(temp::TempPanel::new()),
