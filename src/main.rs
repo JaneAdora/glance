@@ -19,6 +19,7 @@ CONFIG:
   Absent config = all panels in the default order.
 
 KEYS: 1-9/0 jump, n/p cycle, r refresh, [ ] brightness, ? help, q quit.
+      (health panel: v views, j/k focus, +/- log, L bulk-log.)
 ";
 
 fn main() -> Result<()> {
