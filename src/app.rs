@@ -151,7 +151,7 @@ fn render(f: &mut ratatui::Frame, state: &AppState) {
     }
 }
 
-fn centered_rect(parent: ratatui::layout::Rect, percent_x: u16, percent_y: u16) -> ratatui::layout::Rect {
+pub fn centered_rect(parent: ratatui::layout::Rect, percent_x: u16, percent_y: u16) -> ratatui::layout::Rect {
     let v = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -180,6 +180,13 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
 
     if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
         return true;
+    }
+
+    // A panel capturing typed input (e.g. health log entry) gets every key.
+    if state.panels[state.current].wants_keys() {
+        let idx = state.current;
+        let _ = state.panels[idx].handle_key(key);
+        return false;
     }
 
     match key.code {

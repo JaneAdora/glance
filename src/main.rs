@@ -1,14 +1,5 @@
-mod app;
-mod brightness;
-mod config;
-mod footer;
-mod header;
-mod layout;
-mod panels;
-mod theme;
-mod widgets;
-
 use anyhow::Result;
+use glance::{config, panels};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,6 +19,7 @@ CONFIG:
   Absent config = all panels in the default order.
 
 KEYS: 1-9/0 jump, n/p cycle, r refresh, [ ] brightness, ? help, q quit.
+      (health panel: v views, j/k focus, +/- log, L bulk-log.)
 ";
 
 fn main() -> Result<()> {
@@ -65,7 +57,6 @@ fn main() -> Result<()> {
         }
     }
 
-    // Build registry from config if present, else default order.
     let registry = match config::load_order() {
         Some(order) => panels::registry_from_names(&order),
         None => panels::default_registry(),
@@ -81,9 +72,8 @@ fn main() -> Result<()> {
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let mut state = app::AppState::new(registry);
-
-    let result = app::run(&mut terminal, &mut state);
+    let mut state = glance::app::AppState::new(registry);
+    let result = glance::app::run(&mut terminal, &mut state);
 
     crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;

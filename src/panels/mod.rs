@@ -10,7 +10,6 @@ pub mod fans;
 pub mod mem;
 pub mod moon;
 pub mod net;
-pub mod peon;
 pub mod pet;
 pub mod ping;
 pub mod issues;
@@ -20,6 +19,7 @@ pub mod timer;
 pub mod traceroute;
 pub mod tsmap;
 pub mod gpu;
+pub mod health;
 pub mod hurricane;
 pub mod io;
 pub mod loadavg;
@@ -29,7 +29,6 @@ pub mod launchers;
 pub mod music;
 pub mod solar;
 pub mod starfield;
-pub mod water;
 pub mod weather;
 pub mod world_ping;
 
@@ -48,6 +47,11 @@ pub trait Panel {
     fn handle_key(&mut self, _key: crossterm::event::KeyEvent) -> bool {
         false
     }
+    /// When true, the global key handler routes ALL keys to this panel (used by
+    /// panels that capture typed input, e.g. health's log entry). Default off.
+    fn wants_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Every panel name glance knows how to build, in the default display order.
@@ -55,16 +59,16 @@ pub trait Panel {
 /// on the dev box) but remains buildable by name from a config file.
 pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
-    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "issues", "temp", "tsmap",
-    "clock", "weather", "alerts", "hurricane", "solar", "water",
+    "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
+    "clock", "weather", "alerts", "hurricane", "solar",
     "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
 pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
-    "ping", "world-ping", "traceroute", "commits", "peon", "prs", "issues", "temp", "tsmap",
-    "clock", "weather", "alerts", "hurricane", "solar", "water",
+    "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
+    "clock", "weather", "alerts", "hurricane", "solar",
     "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers",
 ];
 
@@ -87,7 +91,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "prs" => Box::new(prs::PrsPanel::new()),
         "issues" => Box::new(issues::IssuesPanel::new()),
         "commits" => Box::new(commits::CommitsPanel::new()),
-        "peon" => Box::new(peon::PeonPanel::new()),
+        "health" => Box::new(health::HealthPanel::new()),
         "temp" => Box::new(temp::TempPanel::new()),
         "tsmap" => Box::new(tsmap::TsMapPanel::new()),
         "clock" => Box::new(clock::ClockPanel::new()),
@@ -95,7 +99,6 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "alerts" => Box::new(alerts::AlertsPanel::new()),
         "hurricane" => Box::new(hurricane::HurricanePanel::new()),
         "solar" => Box::new(solar::SolarPanel::new()),
-        "water" => Box::new(water::WaterPanel::new()),
         "pet" => Box::new(pet::PetPanel::new()),
         "moon" => Box::new(moon::MoonPanel::new()),
         "mascot" => Box::new(mascot::MascotPanel::new()),
