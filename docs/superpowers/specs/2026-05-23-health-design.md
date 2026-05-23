@@ -227,9 +227,9 @@ shared `empty`/loading widgets where a view has nothing to show.
   `health` and not `peon`/`water`.
 - **One-time, non-destructive import** (`migrate.rs`), guarded by a marker file
   (`~/.local/share/glance/.health-migrated`) so it runs once:
-  - Seed `health.toml` goals from peon-ping `config.json` `trainer.exercises` for
-    pushups/squats when present (else the starter defaults), plus water goal 8 — but the
-    locked starter set (incl. bike/walking) wins for any activity not present in peon-ping.
+  - Goals come entirely from the locked starter set (pushups/squats 10, bike/walking 30
+    min, water 8), written by `config::load_or_seed`. Migration imports DATA only and never
+    overrides goals; peon-ping's old 300/300 goals are intentionally ignored.
   - If `~/.local/share/glance/water.json` `date == today`, append a `water` event for its
     `glasses`.
   - If peon-ping `.state.json` has `trainer.reps` (currently absent), append today's reps
@@ -274,7 +274,8 @@ Edited:
 - `src/panels/mod.rs` — drop peon/water, add health; add the `Panel::wants_keys` default
   method (the `Panel` trait is defined in this file).
 - `src/app.rs` — `pub` `centered_rect`; capture-hook branch in `handle_key`.
-- `src/config.rs` — `write_template` panel list reflects health (peon/water gone).
+- `src/config.rs` — no change needed; `write_template` is parameterized by
+  `panels::{ALL_PANELS, DEFAULT_ORDER}`, which already drop peon/water and add health.
 - `Cargo.toml` — (lib target is implicit via `src/lib.rs`; `src/bin/health.rs` is auto.) Add
   `[lib]`/`[[bin]]` stanzas only if Cargo needs disambiguation.
 - `~/projects/dashboard-suite/suite.toml` + `ROADMAP.md` (separate repo).
