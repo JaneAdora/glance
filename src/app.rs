@@ -182,6 +182,13 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         return true;
     }
 
+    // A panel capturing typed input (e.g. health log entry) gets every key.
+    if state.panels[state.current].wants_keys() {
+        let idx = state.current;
+        let _ = state.panels[idx].handle_key(key);
+        return false;
+    }
+
     match key.code {
         KeyCode::Char('q') => return true,
         KeyCode::Char('?') => state.show_help = true,

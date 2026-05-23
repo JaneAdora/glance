@@ -48,6 +48,11 @@ pub trait Panel {
     fn handle_key(&mut self, _key: crossterm::event::KeyEvent) -> bool {
         false
     }
+    /// When true, the global key handler routes ALL keys to this panel (used by
+    /// panels that capture typed input, e.g. health's log entry). Default off.
+    fn wants_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Every panel name glance knows how to build, in the default display order.
