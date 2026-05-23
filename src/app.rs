@@ -151,7 +151,7 @@ fn render(f: &mut ratatui::Frame, state: &AppState) {
     }
 }
 
-fn centered_rect(parent: ratatui::layout::Rect, percent_x: u16, percent_y: u16) -> ratatui::layout::Rect {
+pub fn centered_rect(parent: ratatui::layout::Rect, percent_x: u16, percent_y: u16) -> ratatui::layout::Rect {
     let v = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
