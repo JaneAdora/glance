@@ -2,6 +2,7 @@
 //! standalone `health` binary (src/bin/health.rs).
 pub mod app;
 pub mod brightness;
+pub mod clip;
 pub mod config;
 pub mod footer;
 pub mod header;
