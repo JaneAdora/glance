@@ -4,6 +4,7 @@ pub mod app;
 pub mod brightness;
 pub mod clip;
 pub mod config;
+pub mod crew;
 pub mod footer;
 pub mod header;
 pub mod health;
