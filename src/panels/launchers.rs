@@ -10,7 +10,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
 use std::process::Command;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -186,7 +185,7 @@ impl Panel for LaunchersPanel {
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some((name, _, _)) = PALETTE.iter().find(|(_, _, k)| *k == c) {
-                copy_command(name);
+                crate::clip::copy(name);
                 self.copied = Some((name.to_string(), Instant::now()));
                 return true;
             }
@@ -195,43 +194,3 @@ impl Panel for LaunchersPanel {
     }
 }
 
-/// Put `s` on the clipboard via OSC 52 (reaches the outer terminal over SSH/tmux)
-/// and wl-copy (local Wayland). Best-effort; failures are silent.
-fn copy_command(s: &str) {
-    let seq = format!("\x1b]52;c;{}\x07", b64(s.as_bytes()));
-    let mut out = std::io::stdout();
-    let _ = out.write_all(seq.as_bytes());
-    let _ = out.flush();
-    if let Ok(mut c) = Command::new("wl-copy").stdin(std::process::Stdio::piped()).spawn() {
-        if let Some(mut si) = c.stdin.take() {
-            let _ = si.write_all(s.as_bytes());
-        }
-        let _ = c.wait();
-    }
-}
-
-/// Minimal standard base64 (no line breaks) for OSC 52 payloads.
-fn b64(data: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
-        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
-        out.push(T[(n >> 18 & 63) as usize] as char);
-        out.push(T[(n >> 12 & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { T[(n >> 6 & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::b64;
-    #[test]
-    fn b64_matches_known_vectors() {
-        assert_eq!(b64(b"gst"), "Z3N0");
-        assert_eq!(b64(b"clip"), "Y2xpcA==");
-        assert_eq!(b64(b""), "");
-    }
-}
