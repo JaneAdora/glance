@@ -35,9 +35,10 @@ KEYS:
   Enter   detail modal
   n       new task in focused session
   xx      delete focused task (within 2s)
-  d       exit; print + copy `cd <cwd> && claude --resume <sid> ...`
+  c       copy focused task's detail to clipboard
+  R       exit; print + copy `cd <cwd> && claude --resume <sid>`
           (use as: eval \"$(tasks)\")
-  c       toggle show completed
+  d       toggle show completed (done) tasks
   s       filter to focused session (toggle)
   /       substring filter on subject (Esc clears)
   r       force reload + label cache refresh
@@ -165,8 +166,8 @@ fn run<B: ratatui::backend::Backend>(
                     show_help = false;
                     continue;
                 }
-                // detail modal absorbs everything but the close keys
-                // (Esc / Enter / q / h / Left arrow).
+                // detail modal: close on Esc/Enter/q/h/Left; copy on c.
+                // Everything else is absorbed.
                 if core.show_detail {
                     match key.code {
                         KeyCode::Esc
@@ -175,6 +176,14 @@ fn run<B: ratatui::backend::Backend>(
                         | KeyCode::Char('h')
                         | KeyCode::Left => {
                             core.close_detail();
+                            continue;
+                        }
+                        KeyCode::Char('c') => {
+                            if let Some(text) = core.detail_text() {
+                                let len = text.len();
+                                clip::copy(&text);
+                                core.set_toast(format!("copied detail ({} chars)", len));
+                            }
                             continue;
                         }
                         _ => continue,
@@ -208,12 +217,22 @@ fn run<B: ratatui::backend::Backend>(
                 // normal mode
                 match key.code {
                     KeyCode::Char('q') => return Ok(RunOutcome::Quit),
-                    KeyCode::Char('d') => {
+                    KeyCode::Char('R') => {
                         if let Some(cmd) = build_resume_command(core) {
                             clip::copy(&cmd);
                             return Ok(RunOutcome::PrintAndExit(cmd));
                         }
                     }
+                    KeyCode::Char('c') => {
+                        if let Some(text) = core.detail_text() {
+                            let len = text.len();
+                            clip::copy(&text);
+                            core.set_toast(format!("copied detail ({} chars)", len));
+                        } else {
+                            core.set_toast("no task focused".into());
+                        }
+                    }
+                    KeyCode::Char('d') => core.toggle_show_completed(),
                     KeyCode::Char('?') => show_help = true,
                     KeyCode::Char('j') | KeyCode::Down => core.move_down(),
                     KeyCode::Char('k') | KeyCode::Up => core.move_up(),
@@ -223,7 +242,6 @@ fn run<B: ratatui::backend::Backend>(
                     KeyCode::Char(' ') => { let _ = core.cycle_status(); },
                     KeyCode::Char('n') => core.enter_create_mode(),
                     KeyCode::Char('x') => { let _ = core.arm_or_delete(); },
-                    KeyCode::Char('c') => core.toggle_show_completed(),
                     KeyCode::Char('s') => core.toggle_session_filter(),
                     KeyCode::Char('/') => core.enter_filter_input(),
                     KeyCode::Char('r') => core.refresh(),
@@ -251,7 +269,7 @@ fn run<B: ratatui::backend::Backend>(
 fn build_resume_command(core: &TasksCore) -> Option<String> {
     let g = core.groups.get(core.focus.group)?;
     let sid = &g.session_id;
-    let resume = format!("claude --resume {} --dangerously-skip-permissions", sid);
+    let resume = format!("claude --resume {}", sid);
     match session::cwd_for(sid) {
         Some(cwd) => {
             let escaped = cwd.replace('\'', "'\\''");
@@ -275,8 +293,14 @@ fn render_footer(f: &mut ratatui::Frame, area: ratatui::layout::Rect, core: &Tas
         Span::styled("xx", theme::pane_header_focused()),
         Span::raw(" delete"),
         Span::styled(SEP, theme::dim()),
+        Span::styled("c", theme::pane_header_focused()),
+        Span::raw(" copy"),
+        Span::styled(SEP, theme::dim()),
         Span::styled("d", theme::pane_header_focused()),
-        Span::raw(" drop-in"),
+        Span::raw(" show-done"),
+        Span::styled(SEP, theme::dim()),
+        Span::styled("R", theme::pane_header_focused()),
+        Span::raw(" resume"),
         Span::styled(SEP, theme::dim()),
         Span::styled("/", theme::pane_header_focused()),
         Span::raw(" filter"),
@@ -315,12 +339,14 @@ fn render_help_modal(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         Line::from(Span::raw("  n         new task in focused session")),
         Line::from(Span::raw("  xx        delete (press x twice within 2s)")),
         Line::from(""),
-        Line::from(Span::raw("DROP-IN")),
-        Line::from(Span::raw("  d         exit with `cd <cwd> && claude --resume <sid> ...`")),
+        Line::from(Span::raw("COPY / RESUME")),
+        Line::from(Span::raw("  c         copy focused task's detail to clipboard")),
+        Line::from(Span::raw("            (paste into a Claude prompt)")),
+        Line::from(Span::raw("  R         exit with `cd <cwd> && claude --resume <sid>`")),
         Line::from(Span::raw("            on the clipboard AND printed on stdout for eval")),
         Line::from(""),
         Line::from(Span::raw("VIEW")),
-        Line::from(Span::raw("  c         toggle show completed")),
+        Line::from(Span::raw("  d         toggle show completed (done) tasks")),
         Line::from(Span::raw("  r         reload + refresh label cache")),
         Line::from(Span::raw("  Enter     detail modal")),
         Line::from(""),

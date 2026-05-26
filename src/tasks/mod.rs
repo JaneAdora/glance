@@ -463,6 +463,47 @@ impl TasksCore {
         self.toast("reloaded".into());
     }
 
+    /// Build a plain-text version of the focused task's detail, suitable for
+    /// pasting into a new Claude prompt. Returns `None` if no task is focused.
+    pub fn detail_text(&self) -> Option<String> {
+        let g = self.groups.get(self.focus.group)?;
+        let ti = self.focus.task?;
+        let task = g.tasks.get(ti)?;
+        let mut out = String::new();
+        out.push_str(&format!("Task #{} from {} (session {})\n\n", task.id, g.label, g.session_id));
+        out.push_str(&format!("Subject: {}\n", task.subject));
+        out.push_str(&format!("Status: {}\n", status_label(&task.status)));
+        if !task.active_form.is_empty() {
+            out.push_str(&format!("Active form: {}\n", task.active_form));
+        }
+        if !task.description.is_empty() {
+            out.push_str("\nDescription:\n");
+            for l in task.description.lines() {
+                out.push_str(l);
+                out.push('\n');
+            }
+        }
+        if !task.blocks.is_empty() {
+            let parts: Vec<String> = task.blocks.iter().map(|id| format!("#{}", id)).collect();
+            out.push_str(&format!("\nBlocks: {}\n", parts.join(", ")));
+        }
+        if !task.blocked_by.is_empty() {
+            let parts: Vec<String> = task.blocked_by.iter().map(|id| {
+                let state = g.tasks.iter().find(|t| t.id == *id)
+                    .map(|t| if t.status == Status::Completed { "done" } else { "open" })
+                    .unwrap_or("?");
+                format!("#{} ({})", id, state)
+            }).collect();
+            out.push_str(&format!("Blocked by: {}\n", parts.join(", ")));
+        }
+        Some(out)
+    }
+
+    /// Public way to surface a toast from the bin.
+    pub fn set_toast(&mut self, s: String) {
+        self.toast(s);
+    }
+
     /// Render the grouped task list into `area`. Includes mode overlays
     /// (create input, filter input, detail modal) when active.
     pub fn render(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
