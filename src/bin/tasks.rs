@@ -3,8 +3,14 @@
 //! `~/.config/glance/tasks.toml` on quit (expanded sessions + show_completed).
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use glance::tasks::{Filter, TasksCore};
+use glance::clip;
+use glance::tasks::{session, Filter, TasksCore};
 use glance::theme;
+
+enum RunOutcome {
+    Quit,
+    PrintAndExit(String),
+}
 use ratatui::layout::{Constraint, Layout};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
@@ -24,10 +30,13 @@ USAGE:
 
 KEYS:
   space   cycle status (pending → in_progress → completed → pending)
+  h/l     drill in/out (also Left/Right arrows)
   Tab/o   collapse/expand focused session
   Enter   detail modal
   n       new task in focused session
   xx      delete focused task (within 2s)
+  d       exit; print + copy `cd <cwd> && claude --resume <sid> ...`
+          (use as: eval \"$(tasks)\")
   c       toggle show completed
   s       filter to focused session (toggle)
   /       substring filter on subject (Esc clears)
@@ -115,13 +124,19 @@ fn main() -> Result<()> {
     crossterm::terminal::disable_raw_mode()?;
 
     save_state(&core);
-    outcome
+    match outcome? {
+        RunOutcome::Quit => Ok(()),
+        RunOutcome::PrintAndExit(cmd) => {
+            println!("{cmd}");
+            Ok(())
+        }
+    }
 }
 
 fn run<B: ratatui::backend::Backend>(
     terminal: &mut ratatui::Terminal<B>,
     core: &mut TasksCore,
-) -> Result<()> {
+) -> Result<RunOutcome> {
     let mut last_tick = Instant::now();
     let mut show_help = false;
     loop {
@@ -143,7 +158,7 @@ fn run<B: ratatui::backend::Backend>(
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Release { continue; }
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-                    return Ok(());
+                    return Ok(RunOutcome::Quit);
                 }
                 // help modal absorbs all keys
                 if show_help {
@@ -192,7 +207,13 @@ fn run<B: ratatui::backend::Backend>(
                 }
                 // normal mode
                 match key.code {
-                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('q') => return Ok(RunOutcome::Quit),
+                    KeyCode::Char('d') => {
+                        if let Some(cmd) = build_resume_command(core) {
+                            clip::copy(&cmd);
+                            return Ok(RunOutcome::PrintAndExit(cmd));
+                        }
+                    }
                     KeyCode::Char('?') => show_help = true,
                     KeyCode::Char('j') | KeyCode::Down => core.move_down(),
                     KeyCode::Char('k') | KeyCode::Up => core.move_up(),
@@ -224,6 +245,22 @@ fn run<B: ratatui::backend::Backend>(
     }
 }
 
+/// Build a shell-evalable command that cd's into the focused session's cwd
+/// (if known) and resumes that Claude Code session. Returns `None` if there
+/// is no focused group.
+fn build_resume_command(core: &TasksCore) -> Option<String> {
+    let g = core.groups.get(core.focus.group)?;
+    let sid = &g.session_id;
+    let resume = format!("claude --resume {} --dangerously-skip-permissions", sid);
+    match session::cwd_for(sid) {
+        Some(cwd) => {
+            let escaped = cwd.replace('\'', "'\\''");
+            Some(format!("cd '{}' && {}", escaped, resume))
+        }
+        None => Some(resume),
+    }
+}
+
 fn render_footer(f: &mut ratatui::Frame, area: ratatui::layout::Rect, core: &TasksCore, _show_help: bool) {
     let mut foot = vec![
         Span::styled("space", theme::pane_header_focused()),
@@ -237,6 +274,9 @@ fn render_footer(f: &mut ratatui::Frame, area: ratatui::layout::Rect, core: &Tas
         Span::styled(SEP, theme::dim()),
         Span::styled("xx", theme::pane_header_focused()),
         Span::raw(" delete"),
+        Span::styled(SEP, theme::dim()),
+        Span::styled("d", theme::pane_header_focused()),
+        Span::raw(" drop-in"),
         Span::styled(SEP, theme::dim()),
         Span::styled("/", theme::pane_header_focused()),
         Span::raw(" filter"),
@@ -274,6 +314,10 @@ fn render_help_modal(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         Line::from(Span::raw("  space     cycle status")),
         Line::from(Span::raw("  n         new task in focused session")),
         Line::from(Span::raw("  xx        delete (press x twice within 2s)")),
+        Line::from(""),
+        Line::from(Span::raw("DROP-IN")),
+        Line::from(Span::raw("  d         exit with `cd <cwd> && claude --resume <sid> ...`")),
+        Line::from(Span::raw("            on the clipboard AND printed on stdout for eval")),
         Line::from(""),
         Line::from(Span::raw("VIEW")),
         Line::from(Span::raw("  c         toggle show completed")),

@@ -13,14 +13,20 @@ fn projects_root() -> PathBuf {
     dirs::home_dir().unwrap_or_default().join(".claude/projects")
 }
 
-static CACHE: OnceLock<Mutex<Option<HashMap<SessionId, String>>>> = OnceLock::new();
+#[derive(Clone, Debug)]
+pub struct CachedLabel {
+    pub label: String,
+    pub cwd: Option<String>,
+}
 
-fn cache_handle() -> &'static Mutex<Option<HashMap<SessionId, String>>> {
+static CACHE: OnceLock<Mutex<Option<HashMap<SessionId, CachedLabel>>>> = OnceLock::new();
+
+fn cache_handle() -> &'static Mutex<Option<HashMap<SessionId, CachedLabel>>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
 /// Build the full cache by walking `projects_root()` (used by `label_for` lazily).
-pub fn build_cache_from(root: &Path) -> HashMap<SessionId, String> {
+pub fn build_cache_from(root: &Path) -> HashMap<SessionId, CachedLabel> {
     let mut out = HashMap::new();
     let Ok(entries) = std::fs::read_dir(root) else { return out; };
     for entry in entries.flatten() {
@@ -32,16 +38,21 @@ pub fn build_cache_from(root: &Path) -> HashMap<SessionId, String> {
             let name = f.file_name().to_string_lossy().to_string();
             if !name.ends_with(".jsonl") { continue; }
             let sid = name.trim_end_matches(".jsonl").to_string();
-            let label = label_from_jsonl(&f.path()).unwrap_or_else(|| slug.clone());
-            out.insert(sid, label);
+            let cwd = cwd_from_jsonl(&f.path());
+            let label = cwd.as_deref()
+                .and_then(|p| Path::new(p).file_name())
+                .map(|s| s.to_string_lossy().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| slug.clone());
+            out.insert(sid, CachedLabel { label, cwd });
         }
     }
     out
 }
 
 /// Read up to 20 lines of `<sid>.jsonl` looking for the first object with a
-/// top-level string `cwd` field. Returns its basename.
-pub fn label_from_jsonl(path: &Path) -> Option<String> {
+/// top-level string `cwd` field. Returns the full cwd path (not basenamed).
+pub fn cwd_from_jsonl(path: &Path) -> Option<String> {
     use std::io::{BufRead, BufReader};
     let f = std::fs::File::open(path).ok()?;
     let reader = BufReader::new(f);
@@ -50,13 +61,20 @@ pub fn label_from_jsonl(path: &Path) -> Option<String> {
         let Ok(line) = line else { continue; };
         let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) else { continue; };
         if let Some(cwd) = val.get("cwd").and_then(|v| v.as_str()) {
-            let base = Path::new(cwd).file_name()?.to_string_lossy().to_string();
-            if !base.is_empty() {
-                return Some(base);
+            if !cwd.is_empty() {
+                return Some(cwd.to_string());
             }
         }
     }
     None
+}
+
+/// Compatibility helper: basename of the first cwd found in the jsonl.
+pub fn label_from_jsonl(path: &Path) -> Option<String> {
+    let cwd = cwd_from_jsonl(path)?;
+    Path::new(&cwd).file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// Resolve a session id to a human label. Lazy cache; first call populates.
@@ -66,11 +84,21 @@ pub fn label_for(session_id: &SessionId) -> String {
         *guard = Some(build_cache_from(&projects_root()));
     }
     if let Some(m) = guard.as_ref() {
-        if let Some(lbl) = m.get(session_id) {
-            return lbl.clone();
+        if let Some(c) = m.get(session_id) {
+            return c.label.clone();
         }
     }
     session_id.chars().take(8).collect()
+}
+
+/// Look up the full `cwd` for a session, if known. Returns `None` if the
+/// session's jsonl is absent or has no `cwd` in its first 20 lines.
+pub fn cwd_for(session_id: &SessionId) -> Option<String> {
+    let mut guard = cache_handle().lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(build_cache_from(&projects_root()));
+    }
+    guard.as_ref().and_then(|m| m.get(session_id).and_then(|c| c.cwd.clone()))
 }
 
 /// Clear the cache; next `label_for` will rebuild.
@@ -119,7 +147,9 @@ mod tests {
         let slug_dir = tmp.path().join("-home-jane-foo");
         write_jsonl(&slug_dir, "sid-1", &[r#"{"type":"x"}"#]);
         let cache = build_cache_from(tmp.path());
-        assert_eq!(cache.get("sid-1"), Some(&"-home-jane-foo".to_string()));
+        let c = cache.get("sid-1").expect("present");
+        assert_eq!(c.label, "-home-jane-foo");
+        assert_eq!(c.cwd, None);
     }
 
     #[test]
@@ -131,7 +161,9 @@ mod tests {
             r#"{"cwd":"/home/jane/projects/glance"}"#,
         ]);
         let cache = build_cache_from(tmp.path());
-        assert_eq!(cache.get("sid-2"), Some(&"glance".to_string()));
+        let c = cache.get("sid-2").expect("present");
+        assert_eq!(c.label, "glance");
+        assert_eq!(c.cwd.as_deref(), Some("/home/jane/projects/glance"));
     }
 
     #[test]
