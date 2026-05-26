@@ -30,6 +30,7 @@ pub mod launchers;
 pub mod music;
 pub mod solar;
 pub mod starfield;
+pub mod tasks;
 pub mod weather;
 pub mod world_ping;
 
@@ -62,7 +63,7 @@ pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "crew",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "crew", "tasks",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
@@ -70,7 +71,7 @@ pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "crew",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "crew", "tasks",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -110,6 +111,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "battery" => Box::new(battery::BatteryPanel::new()),
         "launchers" => Box::new(launchers::LaunchersPanel::new()),
         "crew" => Box::new(crew::CrewPanel::new()),
+        "tasks" => Box::new(tasks::TasksPanel::new()),
         _ => return None,
     })
 }

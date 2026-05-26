@@ -45,6 +45,8 @@ pub struct TasksCore {
     pub pending_delete: Option<(SessionId, TaskId, Instant)>,
     pub last_toast: Option<(String, Instant)>,
     pub filter: Filter,
+    pub filter_input: Option<String>,
+    pub show_detail: bool,
 }
 
 impl TasksCore {
@@ -60,6 +62,8 @@ impl TasksCore {
             pending_delete: None,
             last_toast: None,
             filter: Filter::All,
+            filter_input: None,
+            show_detail: false,
         };
         core.full_reload();
         if let Some(g) = core.groups.first() {
@@ -339,6 +343,229 @@ impl TasksCore {
     fn toast(&mut self, s: String) {
         self.last_toast = Some((s, Instant::now()));
     }
+
+    /// Current toast string (rolling 3s window).
+    pub fn current_toast(&self) -> Option<&str> {
+        self.last_toast.as_ref().and_then(|(s, t)| {
+            if t.elapsed() < Duration::from_secs(3) { Some(s.as_str()) } else { None }
+        })
+    }
+
+    /// Begin create mode in the focused session.
+    pub fn enter_create_mode(&mut self) {
+        if self.groups.is_empty() { return; }
+        self.create_mode = Some(String::new());
+    }
+    pub fn cancel_create_mode(&mut self) {
+        self.create_mode = None;
+    }
+    pub fn submit_create(&mut self) -> TaskAction {
+        let buffer = self.create_mode.take().unwrap_or_default();
+        if buffer.trim().is_empty() { return TaskAction::None; }
+        self.create_task(&buffer)
+    }
+    pub fn create_buffer_push(&mut self, c: char) {
+        if let Some(buf) = self.create_mode.as_mut() {
+            buf.push(c);
+        }
+    }
+    pub fn create_buffer_pop(&mut self) {
+        if let Some(buf) = self.create_mode.as_mut() {
+            buf.pop();
+        }
+    }
+
+    /// Begin filter input mode for `/`.
+    pub fn enter_filter_input(&mut self) {
+        let starter = match &self.filter {
+            Filter::Subject(s) => s.clone(),
+            _ => String::new(),
+        };
+        self.filter_input = Some(starter);
+    }
+    pub fn cancel_filter_input(&mut self) {
+        self.filter_input = None;
+    }
+    pub fn submit_filter(&mut self) {
+        if let Some(buf) = self.filter_input.take() {
+            if buf.is_empty() {
+                self.filter = Filter::All;
+            } else {
+                self.filter = Filter::Subject(buf);
+            }
+        }
+    }
+    pub fn filter_buffer_push(&mut self, c: char) {
+        if let Some(b) = self.filter_input.as_mut() { b.push(c); }
+    }
+    pub fn filter_buffer_pop(&mut self) {
+        if let Some(b) = self.filter_input.as_mut() { b.pop(); }
+    }
+
+    pub fn toggle_detail(&mut self) {
+        self.show_detail = !self.show_detail;
+    }
+    pub fn close_detail(&mut self) {
+        self.show_detail = false;
+    }
+
+    /// Force a reload + label cache refresh.
+    pub fn refresh(&mut self) {
+        session::refresh_labels();
+        self.full_reload();
+        self.toast("reloaded".into());
+    }
+
+    /// Render the grouped task list into `area`. Includes mode overlays
+    /// (create input, filter input, detail modal) when active.
+    pub fn render(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::layout::{Constraint, Layout};
+        use ratatui::style::{Modifier, Style};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+
+        let width_class = view::WidthClass::from(area.width);
+
+        // Split: input-line (if any mode is active) + list area.
+        let mode_line: Option<String> = self.create_mode.as_ref()
+            .map(|b| {
+                let label = self.groups.get(self.focus.group)
+                    .map(|g| g.label.as_str()).unwrap_or("?");
+                format!("new in {}: {}_", label, b)
+            })
+            .or_else(|| self.filter_input.as_ref().map(|b| format!("/{}_", b)));
+
+        let layout = if mode_line.is_some() {
+            Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(area)
+        } else {
+            Layout::vertical([Constraint::Min(1)]).split(area)
+        };
+        let list_area = layout[layout.len() - 1];
+
+        if let Some(line) = &mode_line {
+            let p = Paragraph::new(Line::from(Span::styled(line.clone(), crate::theme::pane_header_focused())));
+            f.render_widget(p, layout[0]);
+        }
+
+        let mut lines: Vec<Line> = Vec::new();
+        let mut any_session = false;
+        for (gi, group) in self.groups.iter().enumerate() {
+            if !self.matches_filter(group) { continue; }
+            any_session = true;
+            let expanded = self.expanded.contains(&group.session_id);
+            let chev = if expanded { "▾" } else { "▸" };
+            let header_text = if width_class.show_count_in_header() {
+                format!("{} {} · {} active", chev, group.label, view::count_active(group))
+            } else {
+                format!("{} {}", chev, group.label)
+            };
+            let header_style = if self.focus.group == gi && self.focus.task.is_none() {
+                crate::theme::pane_header_focused()
+            } else {
+                crate::theme::dim()
+            };
+            lines.push(Line::from(Span::styled(header_text, header_style)));
+            if expanded {
+                let task_iter: Vec<(usize, &ClaudeTask)> = group.tasks.iter().enumerate()
+                    .filter(|(_, t)| self.show_completed || t.status != Status::Completed)
+                    .filter(|(_, t)| self.matches_subject_filter(t))
+                    .collect();
+                for (ti, t) in task_iter {
+                    let glyph = match t.status {
+                        Status::Pending => "○",
+                        Status::InProgress => "◐",
+                        Status::Completed => "✓",
+                    };
+                    let blocked_marker = if width_class.show_blocked_marker() {
+                        match view::is_blocked(t, &group.tasks) {
+                            Some(ids) => {
+                                let s = ids.iter().map(|id| format!("#{}", id)).collect::<Vec<_>>().join(",");
+                                format!("  ⛔{}", s)
+                            }
+                            None => String::new(),
+                        }
+                    } else { String::new() };
+                    let subject = if matches!(width_class, view::WidthClass::Tiny) {
+                        let max = (area.width as usize).saturating_sub(8);
+                        truncate(&t.subject, max)
+                    } else {
+                        t.subject.clone()
+                    };
+                    let row = format!("  {} #{}  {}{}", glyph, t.id, subject, blocked_marker);
+                    let style = if self.focus.group == gi && self.focus.task == Some(ti) {
+                        crate::theme::active_row()
+                    } else {
+                        Style::default().fg(crate::theme::lavender())
+                    };
+                    lines.push(Line::from(Span::styled(row, style)));
+                }
+            }
+        }
+        if !any_session {
+            lines.push(Line::from(Span::styled("no tasks. press n to create one.", crate::theme::dim())));
+        }
+        let block = Block::default().borders(Borders::ALL).title("tasks");
+        let p = Paragraph::new(lines).block(block);
+        f.render_widget(p, list_area);
+
+        if self.show_detail {
+            self.render_detail_modal(f, area);
+        }
+    }
+
+    fn render_detail_modal(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::layout::{Constraint, Direction, Layout, Margin};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+        let Some(group) = self.groups.get(self.focus.group) else { return; };
+        let Some(ti) = self.focus.task else { return; };
+        let Some(task) = group.tasks.get(ti) else { return; };
+        let inner = area.inner(Margin { vertical: 2, horizontal: 4 });
+        f.render_widget(Clear, inner);
+        let mut lines: Vec<Line> = vec![
+            Line::from(Span::styled(format!("#{} · {}", task.id, group.label), crate::theme::pane_header_focused())),
+            Line::from(""),
+            Line::from(Span::raw(format!("Status: {}", status_label(&task.status)))),
+            Line::from(""),
+            Line::from(Span::raw(format!("Subject: {}", task.subject))),
+        ];
+        if !task.active_form.is_empty() {
+            lines.push(Line::from(Span::raw(format!("Active:  {}", task.active_form))));
+        }
+        lines.push(Line::from(""));
+        if !task.description.is_empty() {
+            lines.push(Line::from(Span::styled("Description:", crate::theme::dim())));
+            for l in task.description.lines() {
+                lines.push(Line::from(Span::raw(format!("  {}", l))));
+            }
+            lines.push(Line::from(""));
+        }
+        if !task.blocks.is_empty() {
+            let parts: Vec<String> = task.blocks.iter().map(|id| format!("#{}", id)).collect();
+            lines.push(Line::from(Span::raw(format!("Blocks: {}", parts.join(", ")))));
+        }
+        if !task.blocked_by.is_empty() {
+            let parts: Vec<String> = task.blocked_by.iter().map(|id| {
+                let state = group.tasks.iter().find(|t| t.id == *id)
+                    .map(|t| if t.status == Status::Completed { "done" } else { "open" })
+                    .unwrap_or("?");
+                format!("#{} [{}]", id, state)
+            }).collect();
+            lines.push(Line::from(Span::raw(format!("Blocked by: {}", parts.join(", ")))));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("Esc / Enter / q to close", crate::theme::dim())));
+        let block = Block::default().borders(Borders::ALL).title("detail");
+        let p = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+        f.render_widget(p, inner);
+    }
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max { return s.to_string(); }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
 }
 
 fn status_label(s: &Status) -> &'static str {
@@ -383,6 +610,8 @@ mod tests {
             pending_delete: None,
             last_toast: None,
             filter: Filter::All,
+            filter_input: None,
+            show_detail: false,
         }
     }
 
