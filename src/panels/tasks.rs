@@ -28,6 +28,8 @@ impl Panel for TasksPanel {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => { self.core.move_down(); true }
             KeyCode::Char('k') | KeyCode::Up   => { self.core.move_up(); true }
+            KeyCode::Char('l') => { self.core.drill_in(); true }
+            KeyCode::Char('h') => { self.core.drill_out(); true }
             KeyCode::Char('o') => { self.core.toggle_expand(); true }
             KeyCode::Char(' ') => { let _ = self.core.cycle_status(); true }
             _ => false,
@@ -40,8 +42,8 @@ impl Panel for TasksPanel {
         let mut foot = vec![
             Span::styled("space", crate::theme::pane_header_focused()),
             Span::raw(" cycle  "),
-            Span::styled("o", crate::theme::pane_header_focused()),
-            Span::raw(" expand  "),
+            Span::styled("h/l", crate::theme::pane_header_focused()),
+            Span::raw(" drill  "),
             Span::styled("j/k", crate::theme::pane_header_focused()),
             Span::raw(" move"),
         ];

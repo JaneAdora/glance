@@ -152,6 +152,41 @@ impl TasksCore {
         }
     }
 
+    /// Drill one level deeper: header -> expand + step to first task;
+    /// task -> open detail modal; detail open -> no-op.
+    pub fn drill_in(&mut self) {
+        if self.show_detail { return; }
+        if self.focus.task.is_some() {
+            self.show_detail = true;
+            return;
+        }
+        if let Some(g) = self.groups.get(self.focus.group) {
+            let sid = g.session_id.clone();
+            if !self.expanded.contains(&sid) {
+                self.expanded.insert(sid);
+            }
+        }
+        // step to first visible task under this header (which is now expanded).
+        self.move_down();
+    }
+
+    /// Drill one level out: detail open -> close; task -> collapse + back to
+    /// header; expanded header -> collapse; collapsed header -> no-op.
+    pub fn drill_out(&mut self) {
+        if self.show_detail {
+            self.show_detail = false;
+            return;
+        }
+        if let Some(g) = self.groups.get(self.focus.group) {
+            let sid = g.session_id.clone();
+            self.expanded.remove(&sid);
+        }
+        // If we were on a task, drop focus back to the header.
+        if self.focus.task.is_some() {
+            self.focus.task = None;
+        }
+    }
+
     /// Move focus down through visible rows (respects expand + show_completed).
     pub fn move_down(&mut self) {
         let visible = self.visible_rows();
@@ -703,5 +738,34 @@ mod tests {
         assert_eq!(core.filter, Filter::Session("s1".into()));
         core.toggle_session_filter();
         assert_eq!(core.filter, Filter::All);
+    }
+
+    #[test]
+    fn drill_in_and_out_walks_levels() {
+        // Start collapsed, focus on header.
+        let mut core = fresh_core(vec![group("s1", vec![mk("1", Status::Pending), mk("2", Status::Pending)])]);
+        core.expanded.clear();
+        core.focus = Focus { group: 0, task: None };
+        // l on collapsed header -> expand + step to first task.
+        core.drill_in();
+        assert!(core.expanded.contains("s1"));
+        assert_eq!(core.focus.task, Some(0));
+        // l on task -> open detail modal.
+        core.drill_in();
+        assert!(core.show_detail);
+        // l on open detail -> no-op (still open).
+        core.drill_in();
+        assert!(core.show_detail);
+        // h on detail -> close it.
+        core.drill_out();
+        assert!(!core.show_detail);
+        // h on task -> collapse + focus header.
+        core.drill_out();
+        assert_eq!(core.focus.task, None);
+        assert!(!core.expanded.contains("s1"));
+        // h on collapsed header -> no-op (still collapsed, still on header).
+        core.drill_out();
+        assert_eq!(core.focus.task, None);
+        assert!(!core.expanded.contains("s1"));
     }
 }
