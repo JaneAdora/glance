@@ -571,6 +571,7 @@ impl TasksCore {
         f.render_widget(Clear, inner);
         let mut lines: Vec<Line> = vec![
             Line::from(Span::styled(format!("#{} · {}", task.id, group.label), crate::theme::pane_header_focused())),
+            Line::from(Span::styled(format!("session: {}", group.session_id), crate::theme::dim())),
             Line::from(""),
             Line::from(Span::raw(format!("Status: {}", status_label(&task.status)))),
             Line::from(""),
