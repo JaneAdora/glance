@@ -199,7 +199,14 @@ fn run<B: ratatui::backend::Backend>(
                     KeyCode::Char('s') => core.toggle_session_filter(),
                     KeyCode::Char('/') => core.enter_filter_input(),
                     KeyCode::Char('r') => core.refresh(),
-                    KeyCode::Enter => core.toggle_detail(),
+                    KeyCode::Enter => {
+                        // Header focused: toggle expand. Task focused: open detail.
+                        if core.focus.task.is_some() {
+                            core.toggle_detail();
+                        } else {
+                            core.toggle_expand();
+                        }
+                    }
                     KeyCode::Esc => {
                         core.filter = Filter::All;
                     }

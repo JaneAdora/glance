@@ -68,6 +68,13 @@ impl TasksCore {
         core.full_reload();
         if let Some(g) = core.groups.first() {
             core.expanded.insert(g.session_id.clone());
+            // Land focus on the first task if the first group has any; otherwise
+            // on the header (which is still navigable via j to step down).
+            let first_visible_task = g.tasks.iter().position(|t| t.status != Status::Completed)
+                .or_else(|| if g.tasks.is_empty() { None } else { Some(0) });
+            if let Some(ti) = first_visible_task {
+                core.focus = Focus { group: 0, task: Some(ti) };
+            }
         }
         core
     }
@@ -184,7 +191,7 @@ impl TasksCore {
 
     fn matches_filter(&self, group: &SessionGroup) -> bool {
         match &self.filter {
-            Filter::All => true,
+            Filter::All => self.show_completed || view::count_active(group) > 0,
             Filter::Session(sid) => &group.session_id == sid,
             Filter::Subject(_) => true,
         }
@@ -403,6 +410,11 @@ impl TasksCore {
     }
 
     pub fn toggle_detail(&mut self) {
+        // Only open the modal when an actual task is focused; otherwise this
+        // would trap the event loop in show_detail mode with nothing rendered.
+        if !self.show_detail && self.focus.task.is_none() {
+            return;
+        }
         self.show_detail = !self.show_detail;
     }
     pub fn close_detail(&mut self) {
