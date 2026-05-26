@@ -150,10 +150,15 @@ fn run<B: ratatui::backend::Backend>(
                     show_help = false;
                     continue;
                 }
-                // detail modal absorbs Enter/Esc/q
+                // detail modal absorbs everything but the close keys
+                // (Esc / Enter / q / h / Left arrow).
                 if core.show_detail {
                     match key.code {
-                        KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                        KeyCode::Esc
+                        | KeyCode::Enter
+                        | KeyCode::Char('q')
+                        | KeyCode::Char('h')
+                        | KeyCode::Left => {
                             core.close_detail();
                             continue;
                         }
