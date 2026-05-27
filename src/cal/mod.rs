@@ -586,6 +586,20 @@ mod tests {
     }
 
     #[test]
+    fn toggle_expand_flips_focused_day() {
+        let mut core = fresh_core(vec![
+            day("2026-05-26", true, vec![make_event("a", "2026-05-26T09:00:00-05:00", "2026-05-26T10:00:00-05:00")]),
+        ]);
+        let d: Date = "2026-05-26".parse().unwrap();
+        // fresh_core seeds today as expanded; collapse it.
+        core.toggle_expand();
+        assert!(!core.expanded.contains(&d));
+        // Expand again.
+        core.toggle_expand();
+        assert!(core.expanded.contains(&d));
+    }
+
+    #[test]
     fn move_down_walks_visible_rows() {
         let mut core = fresh_core(vec![
             day("2026-05-26", true, vec![

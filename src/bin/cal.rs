@@ -96,8 +96,8 @@ fn run<B: ratatui::backend::Backend>(
                     KeyCode::Char('k') | KeyCode::Up => core.move_up(),
                     KeyCode::Char('l') | KeyCode::Right => core.drill_in(),
                     KeyCode::Char('h') | KeyCode::Left => core.drill_out(),
-                    KeyCode::Char('o') | KeyCode::Tab => core.toggle_expand(),
-                    KeyCode::Char(' ') | KeyCode::Char('y') => { let _ = core.copy_url(); }
+                    KeyCode::Char('o') | KeyCode::Tab | KeyCode::Char(' ') => core.toggle_expand(),
+                    KeyCode::Char('y') => { let _ = core.copy_url(); }
                     KeyCode::Char('c') => { let _ = core.copy_detail(); }
                     KeyCode::Char('p') => core.toggle_past(),
                     KeyCode::Char('r') => core.refresh(),
@@ -111,11 +111,11 @@ fn run<B: ratatui::backend::Backend>(
 
 fn render_footer(f: &mut ratatui::Frame, area: ratatui::layout::Rect, core: &CalCore) {
     let mut foot = vec![
-        Span::styled("space", theme::pane_header_focused()), Span::raw(" copy URL"),
+        Span::styled("space", theme::pane_header_focused()), Span::raw(" expand"),
+        Span::styled(SEP, theme::dim()),
+        Span::styled("y", theme::pane_header_focused()), Span::raw(" copy URL"),
         Span::styled(SEP, theme::dim()),
         Span::styled("c", theme::pane_header_focused()), Span::raw(" copy detail"),
-        Span::styled(SEP, theme::dim()),
-        Span::styled("y", theme::pane_header_focused()), Span::raw(" url"),
         Span::styled(SEP, theme::dim()),
         Span::styled("p", theme::pane_header_focused()), Span::raw(" past"),
         Span::styled(SEP, theme::dim()),
@@ -142,13 +142,12 @@ fn render_help(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         Line::from(Span::raw("NAVIGATION")),
         Line::from(Span::raw("  j / ↓     next row")),
         Line::from(Span::raw("  k / ↑     prev row")),
-        Line::from(Span::raw("  Tab / o   toggle expand on focused day")),
+        Line::from(Span::raw("  space / Tab / o   toggle expand on focused day")),
         Line::from(Span::raw("  l / →     drill in (header → event → detail)")),
         Line::from(Span::raw("  h / ←     drill out (detail → event → header)")),
         Line::from(""),
         Line::from(Span::raw("ACTIONS")),
-        Line::from(Span::raw("  space     copy focused event's Meet URL")),
-        Line::from(Span::raw("  y         copy URL (alias for space)")),
+        Line::from(Span::raw("  y         copy focused event's Meet URL")),
         Line::from(Span::raw("  c         copy event detail (paste into a Claude prompt)")),
         Line::from(Span::raw("  Enter     detail modal (alias for l on event)")),
         Line::from(""),
