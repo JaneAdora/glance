@@ -4,3 +4,4 @@
 pub mod bridge;
 pub mod desc;
 pub mod event;
+pub mod view;
