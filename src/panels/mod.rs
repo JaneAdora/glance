@@ -4,6 +4,7 @@ pub mod clock;
 pub mod commits;
 pub mod cpu;
 pub mod disk;
+pub mod cal;
 pub mod conn;
 pub mod entropy;
 pub mod fans;
@@ -63,7 +64,7 @@ pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "crew", "tasks",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "cal", "crew", "tasks",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
@@ -71,7 +72,7 @@ pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "crew", "tasks",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "cal", "crew", "tasks",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -110,6 +111,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "starfield" => Box::new(starfield::StarfieldPanel::new()),
         "battery" => Box::new(battery::BatteryPanel::new()),
         "launchers" => Box::new(launchers::LaunchersPanel::new()),
+        "cal" => Box::new(cal::CalPanel::new()),
         "crew" => Box::new(crew::CrewPanel::new()),
         "tasks" => Box::new(tasks::TasksPanel::new()),
         _ => return None,
