@@ -112,6 +112,43 @@ impl StandupPanel {
     }
 }
 
+fn fmt_hh_mm(secs: i64) -> String {
+    let ts = match jiff::Timestamp::from_second(secs) {
+        Ok(t) => t,
+        Err(_) => return "--:--".to_string(),
+    };
+    let z = ts.to_zoned(jiff::tz::TimeZone::system());
+    let hour12 = match z.hour() % 12 {
+        0 => 12,
+        n => n,
+    };
+    let suffix = if z.hour() >= 12 { "PM" } else { "AM" };
+    format!("{}:{:02} {}", hour12, z.minute(), suffix)
+}
+
+fn fmt_today_header(z: &jiff::Zoned) -> String {
+    let weekday = match z.date().weekday() {
+        jiff::civil::Weekday::Monday => "Mon",
+        jiff::civil::Weekday::Tuesday => "Tue",
+        jiff::civil::Weekday::Wednesday => "Wed",
+        jiff::civil::Weekday::Thursday => "Thu",
+        jiff::civil::Weekday::Friday => "Fri",
+        jiff::civil::Weekday::Saturday => "Sat",
+        jiff::civil::Weekday::Sunday => "Sun",
+    };
+    let month = match z.month() {
+        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr",
+        5 => "May", 6 => "Jun", 7 => "Jul", 8 => "Aug",
+        9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
+        _ => "-",
+    };
+    format!("TODAY · {} {} {}", weekday, month, z.day())
+}
+
+fn minutes_until_secs(start_secs: i64, now_secs: i64) -> i64 {
+    (start_secs - now_secs) / 60
+}
+
 impl Panel for StandupPanel {
     fn name(&self) -> &str { "standup" }
     fn refresh_ms(&self) -> u64 { 60_000 }
@@ -158,17 +195,119 @@ impl Panel for StandupPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect) {
-        let title = Line::from(Span::styled(" standup ", theme::pane_header()));
-        let body = Line::from(Span::styled(
-            format!(
-                "today: {} commits / {} sessions / {} meetings (loading)",
-                self.today.commits.total,
-                self.today.sessions.count,
-                self.today.meetings.done + self.today.meetings.upcoming
-            ),
+        let now_local = jiff::Zoned::now();
+        let now_secs = now_local.timestamp().as_second();
+
+        let header = Line::from(Span::styled(
+            format!(" {} ", fmt_today_header(&now_local)),
+            theme::pane_header(),
+        ));
+        let rule = Line::from(Span::styled(
+            "─".repeat(area.width.saturating_sub(2) as usize),
             theme::dim(),
         ));
-        f.render_widget(Paragraph::new(vec![title, body]), area);
+
+        let pad = "  ";
+        let label_w = 12;
+
+        let count_or_dots = |loading: bool, n: u32| -> String {
+            if loading && n == 0 { "  …".to_string() } else { format!("{:>3}", n) }
+        };
+
+        // Commits row.
+        let commits_count = count_or_dots(self.loading_git, self.today.commits.total);
+        let commits_suffix = if self.today.commits.total == 0 && !self.loading_git {
+            String::new()
+        } else {
+            let mut s = format!("across {} repos", self.today.commits.repos_touched);
+            if let Some(last) = self.today.commits.last_at {
+                s.push_str(&format!(" · last {}", fmt_hh_mm(last)));
+            }
+            s
+        };
+        let commits_line = Line::from(vec![
+            Span::raw(pad),
+            Span::styled(format!("{:label_w$}", "commits", label_w = label_w), theme::historical()),
+            Span::styled(commits_count, theme::now()),
+            Span::raw("  "),
+            Span::styled(commits_suffix, theme::historical()),
+        ]);
+
+        // Sessions row.
+        let sessions_count = count_or_dots(self.loading_sessions, self.today.sessions.count);
+        let sessions_suffix = if self.today.sessions.count == 0 && !self.loading_sessions {
+            String::new()
+        } else {
+            let mut s = "claude code".to_string();
+            if let Some(last) = self.today.sessions.last_at {
+                s.push_str(&format!(" · last {}", fmt_hh_mm(last)));
+            }
+            s
+        };
+        let sessions_line = Line::from(vec![
+            Span::raw(pad),
+            Span::styled(format!("{:label_w$}", "sessions", label_w = label_w), theme::historical()),
+            Span::styled(sessions_count, theme::now()),
+            Span::raw("  "),
+            Span::styled(sessions_suffix, theme::historical()),
+        ]);
+
+        // Meetings row.
+        let m = &self.today.meetings;
+        let total_meetings = m.done + m.upcoming;
+        let (meetings_count, next_summary, suffix_style) = if self.meetings_unavailable {
+            ("  -".to_string(), "meetings unavailable".to_string(), theme::dim())
+        } else {
+            let count = format!("{:>3}", total_meetings);
+            let urgent = m
+                .next
+                .as_ref()
+                .is_some_and(|n| (0..=15).contains(&minutes_until_secs(n.start_secs, now_secs)));
+            let summary = match &m.next {
+                Some(n) => format!("{} done · {} left · next {}", m.done, m.upcoming, fmt_hh_mm(n.start_secs)),
+                None if total_meetings > 0 => format!("{} done · 0 left", m.done),
+                None => String::new(),
+            };
+            let style = if urgent { theme::alert() } else { theme::historical() };
+            (count, summary, style)
+        };
+        let meetings_line = Line::from(vec![
+            Span::raw(pad),
+            Span::styled(format!("{:label_w$}", "meetings", label_w = label_w), theme::historical()),
+            Span::styled(meetings_count, theme::now()),
+            Span::raw("  "),
+            Span::styled(next_summary, suffix_style),
+        ]);
+        let next_title_line = match (self.meetings_unavailable, &m.next) {
+            (false, Some(n)) => Line::from(vec![
+                Span::raw(" ".repeat(pad.len() + label_w + 5)),
+                Span::styled(format!("\"{}\"", n.title), suffix_style),
+            ]),
+            _ => Line::from(""),
+        };
+
+        // Yesterday line.
+        let y = &self.yesterday;
+        let yesterday_line = Line::from(vec![
+            Span::raw(pad),
+            Span::styled(format!("{:label_w$}", "yesterday", label_w = label_w), theme::historical()),
+            Span::styled(
+                format!(
+                    "{}c · {}s · {}m",
+                    y.commits.total, y.sessions.count, y.meetings.done + y.meetings.upcoming,
+                ),
+                theme::dim(),
+            ),
+        ]);
+
+        let lines = vec![
+            header, rule,
+            commits_line, sessions_line, meetings_line, next_title_line,
+            Line::from(""),
+            yesterday_line,
+        ];
+
+        f.render_widget(Paragraph::new(lines), area);
     }
 }
 
