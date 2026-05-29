@@ -67,6 +67,18 @@ impl StandupPanel {
             let _ = tx.send(Msg::Commits { today, yesterday });
         });
     }
+
+    fn kick_session_scan(&mut self) {
+        let tx = self.tx.clone();
+        let now = jiff::Zoned::now();
+        let (today_start, yesterday_start) = day_boundaries(now);
+        self.loading_sessions = true;
+        self.last_session_scan = Some(Instant::now());
+        thread::spawn(move || {
+            let (today, yesterday) = scan_sessions(today_start, yesterday_start);
+            let _ = tx.send(Msg::Sessions { today, yesterday });
+        });
+    }
 }
 
 impl Panel for StandupPanel {
@@ -93,6 +105,12 @@ impl Panel for StandupPanel {
             .unwrap_or(true);
         if stale_git && !self.loading_git {
             self.kick_git_scan();
+        }
+        let stale_sessions = self.last_session_scan
+            .map(|t| t.elapsed() > Duration::from_secs(300))
+            .unwrap_or(true);
+        if stale_sessions && !self.loading_sessions {
+            self.kick_session_scan();
         }
     }
 
@@ -196,6 +214,50 @@ fn scan_commits(
         }
     }
     (summarize_commits(&today_rows), summarize_commits(&yesterday_rows))
+}
+
+fn claude_projects_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude").join("projects"))
+}
+
+fn collect_session_mtimes() -> Vec<SystemTime> {
+    let Some(root) = claude_projects_dir() else { return Vec::new() };
+    let outer = match std::fs::read_dir(&root) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for project in outer.flatten() {
+        let pp = project.path();
+        if !pp.is_dir() { continue; }
+        let inner = match std::fs::read_dir(&pp) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        for f in inner.flatten() {
+            let fp = f.path();
+            if fp.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+            if let Ok(meta) = f.metadata() {
+                if let Ok(mtime) = meta.modified() {
+                    out.push(mtime);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn scan_sessions(
+    today_start: SystemTime,
+    yesterday_start: SystemTime,
+) -> (SessionsSnapshot, SessionsSnapshot) {
+    let mtimes = collect_session_mtimes();
+    let now = SystemTime::now();
+    let today = count_sessions(&mtimes, today_start, now);
+    let yesterday = count_sessions(&mtimes, yesterday_start, today_start);
+    (today, yesterday)
 }
 
 #[derive(Default, Clone, Debug)]
