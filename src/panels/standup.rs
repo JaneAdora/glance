@@ -55,6 +55,32 @@ fn day_boundaries(now: jiff::Zoned) -> (SystemTime, SystemTime) {
     )
 }
 
+#[derive(Default, Clone, Debug)]
+pub struct CommitsSnapshot {
+    pub total: u32,
+    pub repos_touched: u32,
+    /// Most recent committer time, unix seconds.
+    pub last_at: Option<i64>,
+}
+
+/// Aggregates `(repo_label, %cI, %H, %s)` rows into a snapshot.
+fn summarize_commits(lines: &[(String, String, String, String)]) -> CommitsSnapshot {
+    let mut repos: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut last_at: Option<i64> = None;
+    for (repo, ci, _sha, _subj) in lines {
+        repos.insert(repo.as_str());
+        if let Ok(ts) = ci.parse::<jiff::Timestamp>() {
+            let secs = ts.as_second();
+            last_at = Some(last_at.map_or(secs, |prev| prev.max(secs)));
+        }
+    }
+    CommitsSnapshot {
+        total: lines.len() as u32,
+        repos_touched: repos.len() as u32,
+        last_at,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +106,46 @@ mod tests {
         let expected_today = std::time::UNIX_EPOCH
             + std::time::Duration::from_secs(1779944400);
         assert_eq!(today, expected_today);
+    }
+
+    fn cm(repo: &str, ci: &str, sha: &str, subj: &str) -> (String, String, String, String) {
+        (repo.into(), ci.into(), sha.into(), subj.into())
+    }
+
+    #[test]
+    fn summarize_commits_empty_is_zero() {
+        let s = summarize_commits(&[]);
+        assert_eq!(s.total, 0);
+        assert_eq!(s.repos_touched, 0);
+        assert_eq!(s.last_at, None);
+    }
+
+    #[test]
+    fn summarize_commits_counts_across_repos() {
+        let rows = vec![
+            cm("/p/a", "2026-05-28T09:00:00-05:00", "aaa", "first"),
+            cm("/p/a", "2026-05-28T11:30:00-05:00", "bbb", "second"),
+            cm("/p/b", "2026-05-28T14:14:00-05:00", "ccc", "third"),
+        ];
+        let s = summarize_commits(&rows);
+        assert_eq!(s.total, 3);
+        assert_eq!(s.repos_touched, 2);
+        let expected_last: i64 = "2026-05-28T14:14:00-05:00"
+            .parse::<jiff::Timestamp>().unwrap().as_second();
+        assert_eq!(s.last_at, Some(expected_last));
+    }
+
+    #[test]
+    fn summarize_commits_skips_malformed_time() {
+        let rows = vec![
+            cm("/p/a", "not-a-date", "aaa", "first"),
+            cm("/p/a", "2026-05-28T11:30:00-05:00", "bbb", "second"),
+        ];
+        let s = summarize_commits(&rows);
+        assert_eq!(s.total, 2);
+        assert_eq!(s.repos_touched, 1);
+        let expected_last: i64 = "2026-05-28T11:30:00-05:00"
+            .parse::<jiff::Timestamp>().unwrap().as_second();
+        assert_eq!(s.last_at, Some(expected_last));
     }
 }
