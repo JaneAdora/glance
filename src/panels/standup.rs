@@ -15,6 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 // project_roots + find_repos are reused from commits.rs (made pub(crate)).
 use crate::panels::commits::{find_repos, project_roots};
+use crate::cal::CalCore;
 
 enum Msg {
     Commits { today: CommitsSnapshot, yesterday: CommitsSnapshot },
@@ -38,6 +39,8 @@ pub struct StandupPanel {
     loading_git: bool,
     loading_sessions: bool,
     last_date_seen: Option<jiff::civil::Date>,
+    cal: CalCore,
+    meetings_unavailable: bool,
 }
 
 impl StandupPanel {
@@ -53,6 +56,8 @@ impl StandupPanel {
             loading_git: false,
             loading_sessions: false,
             last_date_seen: None,
+            cal: CalCore::new(),
+            meetings_unavailable: false,
         }
     }
 
@@ -79,6 +84,32 @@ impl StandupPanel {
             let _ = tx.send(Msg::Sessions { today, yesterday });
         });
     }
+
+    fn refresh_meetings(&mut self, now_local: &jiff::Zoned) {
+        self.cal.tick();
+        let now_ts = now_local.timestamp();
+        let today_date = now_local.date();
+        let yesterday_date = today_date
+            .checked_sub(jiff::Span::new().days(1))
+            .unwrap_or(today_date);
+
+        let today_events: Vec<_> = self.cal.days.iter()
+            .find(|g| g.date == today_date)
+            .map(|g| g.events.clone())
+            .unwrap_or_default();
+        let yesterday_events: Vec<_> = self.cal.days.iter()
+            .find(|g| g.date == yesterday_date)
+            .map(|g| g.events.clone())
+            .unwrap_or_default();
+
+        self.today.meetings = summarize_meetings(&today_events, now_ts);
+        self.yesterday.meetings = summarize_meetings(&yesterday_events, now_ts);
+
+        // "unavailable" only when a fetch errored AND we have no calendar data at
+        // all. A successful fetch with no events today is "0 meetings", not an error.
+        self.meetings_unavailable =
+            self.cal.last_fetch_error.is_some() && self.cal.days.is_empty();
+    }
 }
 
 impl Panel for StandupPanel {
@@ -100,18 +131,30 @@ impl Panel for StandupPanel {
                 }
             }
         }
-        let stale_git = self.last_git_scan
+
+        let now_local = jiff::Zoned::now();
+        let today_date = now_local.date();
+        let rolled = match self.last_date_seen {
+            Some(d) => d != today_date,
+            None => false,
+        };
+        self.last_date_seen = Some(today_date);
+
+        let stale_git = rolled || self.last_git_scan
             .map(|t| t.elapsed() > Duration::from_secs(300))
             .unwrap_or(true);
         if stale_git && !self.loading_git {
             self.kick_git_scan();
         }
-        let stale_sessions = self.last_session_scan
+
+        let stale_sessions = rolled || self.last_session_scan
             .map(|t| t.elapsed() > Duration::from_secs(300))
             .unwrap_or(true);
         if stale_sessions && !self.loading_sessions {
             self.kick_session_scan();
         }
+
+        self.refresh_meetings(&now_local);
     }
 
     fn render(&self, f: &mut Frame, area: Rect) {

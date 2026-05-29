@@ -39,6 +39,7 @@ pub struct CalCore {
     pub last_fetched: Option<Instant>,
     pub last_toast: Option<(String, Instant)>,
     pub stale_cache: bool,
+    pub last_fetch_error: Option<String>,
     rx: Option<mpsc::Receiver<Result<FetchResult, BridgeError>>>,
 }
 
@@ -53,6 +54,7 @@ impl CalCore {
             last_fetched: None,
             last_toast: None,
             stale_cache: false,
+            last_fetch_error: None,
             rx: None,
         };
         // Seed from cache: any age. If fresh, no need to fetch immediately; if stale, fetch later in tick.
@@ -130,9 +132,11 @@ impl CalCore {
             match rx.try_recv() {
                 Ok(Ok(result)) => {
                     self.apply_fetch(result);
+                    self.last_fetch_error = None;
                     self.rx = None;
                 }
                 Ok(Err(e)) => {
+                    self.last_fetch_error = Some(format!("{}", e));
                     self.toast(format!("{}", e));
                     self.rx = None;
                 }
@@ -527,7 +531,7 @@ mod tests {
             days, focus: Focus { day: 0, event: Some(0) },
             expanded, show_detail: false, show_past: true,
             last_fetched: Some(Instant::now()),
-            last_toast: None, stale_cache: false, rx: None,
+            last_toast: None, stale_cache: false, last_fetch_error: None, rx: None,
         }
     }
 
