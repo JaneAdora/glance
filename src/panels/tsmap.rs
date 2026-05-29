@@ -1,7 +1,7 @@
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use crate::layout::braille_aspect_bounds;

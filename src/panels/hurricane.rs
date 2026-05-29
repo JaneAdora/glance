@@ -1,6 +1,5 @@
 //! Active Atlantic-basin tropical cyclones from NHC. Shows storm positions on
 //! a regional map; off-season pleasant empty state.
-use crate::layout::braille_aspect_bounds;
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -19,21 +18,21 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ApiResponse {
     #[serde(default)]
-    activeStorms: Vec<ApiStorm>,
+    active_storms: Vec<ApiStorm>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ApiStorm {
     name: Option<String>,
     classification: Option<String>, // "HU" / "TS" / "TD" / "PT" / "MD" etc.
     intensity: Option<String>,      // wind in mph string
     pressure: Option<String>,       // mb
-    latitudeNumeric: Option<f64>,
-    longitudeNumeric: Option<f64>,
-    movementDir: Option<i64>,
-    movementSpeed: Option<i64>,
+    latitude_numeric: Option<f64>,
+    longitude_numeric: Option<f64>,
     #[serde(rename = "binNumber")]
     bin: Option<String>,             // e.g. AL022024
 }
@@ -112,13 +111,13 @@ fn fetch() -> Result<Vec<Storm>, String> {
     let parsed: ApiResponse =
         serde_json::from_slice(&out.stdout).map_err(|e| format!("json: {e}"))?;
     let mut storms = Vec::new();
-    for s in parsed.activeStorms {
+    for s in parsed.active_storms {
         let bin = s.bin.clone().unwrap_or_default();
         // Filter to Atlantic basin only (binNumber starts with "AL").
         if !bin.starts_with("AL") {
             continue;
         }
-        let (Some(lat), Some(lon)) = (s.latitudeNumeric, s.longitudeNumeric) else {
+        let (Some(lat), Some(lon)) = (s.latitude_numeric, s.longitude_numeric) else {
             continue;
         };
         storms.push(Storm {

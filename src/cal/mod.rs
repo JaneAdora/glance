@@ -8,9 +8,8 @@ pub mod view;
 
 use crate::cal::bridge::{BridgeError, FetchResult};
 use crate::cal::event::{Event, ResponseStatus};
-use crate::cal::view::{DayGroup, WidthClass};
-use crossterm::event::{KeyCode, KeyEvent};
-use jiff::{Timestamp, Zoned};
+use crate::cal::view::DayGroup;
+use jiff::Timestamp;
 use std::collections::HashSet;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};

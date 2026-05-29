@@ -4,7 +4,6 @@ use crate::layout::braille_aspect_bounds;
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::Rect;
-use ratatui::style::Color;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::canvas::{Canvas, Points};

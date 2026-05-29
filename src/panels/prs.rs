@@ -5,7 +5,7 @@ use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use serde::Deserialize;
 use std::process::Command;
@@ -19,8 +19,6 @@ use std::time::{Duration, Instant};
 struct ApiPr {
     title: String,
     repository: ApiRepo,
-    #[serde(default)]
-    url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

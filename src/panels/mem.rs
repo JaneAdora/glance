@@ -1,7 +1,6 @@
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Sparkline};
 use ratatui::Frame;

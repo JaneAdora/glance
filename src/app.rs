@@ -1,6 +1,6 @@
 use crate::footer;
 use crate::header;
-use crate::panels::{self, Panel};
+use crate::panels::Panel;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout};

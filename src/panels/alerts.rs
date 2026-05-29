@@ -33,7 +33,6 @@ struct ApiProps {
     headline: Option<String>,
     #[serde(rename = "areaDesc")]
     area_desc: Option<String>,
-    effective: Option<String>,
     expires: Option<String>,
 }
 

@@ -508,9 +508,9 @@ impl TasksCore {
     /// (create input, filter input, detail modal) when active.
     pub fn render(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         use ratatui::layout::{Constraint, Layout};
-        use ratatui::style::{Modifier, Style};
+        use ratatui::style::Style;
         use ratatui::text::{Line, Span};
-        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+        use ratatui::widgets::{Block, Borders, Paragraph};
 
         let width_class = view::WidthClass::from(area.width);
 
@@ -602,7 +602,7 @@ impl TasksCore {
     }
 
     fn render_detail_modal(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
-        use ratatui::layout::{Constraint, Direction, Layout, Margin};
+        use ratatui::layout::Margin;
         use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
         let Some(group) = self.groups.get(self.focus.group) else { return; };

@@ -124,9 +124,14 @@ pub fn load_cache() -> Option<FetchResult> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use std::sync::Mutex;
+    // Serialize tests that mutate process-global env vars (GLANCE_CAL_SHIM /
+    // GLANCE_CAL_CACHE) so parallel `cargo test` runs can't stomp each other.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn shim_path_respects_env_override() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::set_var("GLANCE_CAL_SHIM", "/tmp/foo.py");
         assert_eq!(shim_path(), PathBuf::from("/tmp/foo.py"));
         std::env::remove_var("GLANCE_CAL_SHIM");
@@ -134,6 +139,7 @@ mod tests {
 
     #[test]
     fn shim_missing_yields_typed_error() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::set_var("GLANCE_CAL_SHIM", "/nonexistent/path.py");
         let err = fetch_sync().unwrap_err();
         assert!(matches!(err, BridgeError::ShimMissing(_)));
@@ -142,6 +148,7 @@ mod tests {
 
     #[test]
     fn fetch_via_fake_python_shim() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         let pyshim = tmp.path().join("fakeshim.py");
         let json_line = r#"{"summary":"1 events","items":[{"id":"a","summary":"S","description":"","location":"","start":"2026-05-26T09:00:00-05:00","end":"2026-05-26T09:30:00-05:00","all_day":false,"status":"confirmed","html_link":"","hangout_link":"","meet_url":"","attendees":[],"is_recurring":false,"recurring_event_id":"","calendar_id":"primary"}]}"#;
@@ -160,6 +167,7 @@ mod tests {
 
     #[test]
     fn cache_roundtrip_via_env_override() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         let cache = tmp.path().join("cache.json");
         std::env::set_var("GLANCE_CAL_CACHE", &cache);

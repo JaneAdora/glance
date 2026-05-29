@@ -4,13 +4,12 @@ use crate::layout::braille_aspect_bounds;
 use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::Color;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::canvas::{Canvas, Points};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Each pose: bitmap rows top-to-bottom of (body, accent, face) layers. Each
 /// row is the same width. ` ` = transparent, `B` = body, `A` = accent

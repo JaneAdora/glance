@@ -12,7 +12,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
 
-const DAYS: usize = 91;
 
 pub struct CommitsPanel {
     counts: HashMap<String, u32>,  // ISO date string -> count
