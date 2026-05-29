@@ -9,7 +9,15 @@ pub fn copy(s: &str) {
     let mut out = std::io::stdout();
     let _ = out.write_all(seq.as_bytes());
     let _ = out.flush();
-    if let Ok(mut c) = Command::new("wl-copy").stdin(std::process::Stdio::piped()).spawn() {
+    // Silence wl-copy's stdout/stderr: over SSH (no WAYLAND_DISPLAY) it prints a
+    // multi-line "failed to connect to a Wayland server" error that, if inherited,
+    // lands on the alternate screen and corrupts the TUI.
+    if let Ok(mut c) = Command::new("wl-copy")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
         if let Some(mut si) = c.stdin.take() {
             let _ = si.write_all(s.as_bytes());
         }
