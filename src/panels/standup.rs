@@ -8,20 +8,105 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
+// project_roots + find_repos are reused from commits.rs (made pub(crate)).
+use crate::panels::commits::{find_repos, project_roots};
 
-pub struct StandupPanel {}
+enum Msg {
+    Commits { today: CommitsSnapshot, yesterday: CommitsSnapshot },
+    Sessions { today: SessionsSnapshot, yesterday: SessionsSnapshot },
+}
+
+#[derive(Default, Clone)]
+struct Snapshot {
+    commits: CommitsSnapshot,
+    sessions: SessionsSnapshot,
+    meetings: MeetingsSnapshot,
+}
+
+pub struct StandupPanel {
+    today: Snapshot,
+    yesterday: Snapshot,
+    last_git_scan: Option<Instant>,
+    last_session_scan: Option<Instant>,
+    rx: mpsc::Receiver<Msg>,
+    tx: mpsc::Sender<Msg>,
+    loading_git: bool,
+    loading_sessions: bool,
+    last_date_seen: Option<jiff::civil::Date>,
+}
 
 impl StandupPanel {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
+        Self {
+            today: Snapshot::default(),
+            yesterday: Snapshot::default(),
+            last_git_scan: None,
+            last_session_scan: None,
+            rx,
+            tx,
+            loading_git: false,
+            loading_sessions: false,
+            last_date_seen: None,
+        }
+    }
+
+    fn kick_git_scan(&mut self) {
+        let tx = self.tx.clone();
+        let now = jiff::Zoned::now();
+        let (today_start, yesterday_start) = day_boundaries(now);
+        self.loading_git = true;
+        self.last_git_scan = Some(Instant::now());
+        thread::spawn(move || {
+            let (today, yesterday) = scan_commits(today_start, yesterday_start);
+            let _ = tx.send(Msg::Commits { today, yesterday });
+        });
+    }
 }
 
 impl Panel for StandupPanel {
     fn name(&self) -> &str { "standup" }
     fn refresh_ms(&self) -> u64 { 60_000 }
-    fn tick(&mut self) {}
+
+    fn tick(&mut self) {
+        while let Ok(msg) = self.rx.try_recv() {
+            match msg {
+                Msg::Commits { today, yesterday } => {
+                    self.today.commits = today;
+                    self.yesterday.commits = yesterday;
+                    self.loading_git = false;
+                }
+                Msg::Sessions { today, yesterday } => {
+                    self.today.sessions = today;
+                    self.yesterday.sessions = yesterday;
+                    self.loading_sessions = false;
+                }
+            }
+        }
+        let stale_git = self.last_git_scan
+            .map(|t| t.elapsed() > Duration::from_secs(300))
+            .unwrap_or(true);
+        if stale_git && !self.loading_git {
+            self.kick_git_scan();
+        }
+    }
+
     fn render(&self, f: &mut Frame, area: Rect) {
         let title = Line::from(Span::styled(" standup ", theme::pane_header()));
-        let body = Line::from(Span::styled("loading...", theme::dim()));
+        let body = Line::from(Span::styled(
+            format!(
+                "today: {} commits / {} sessions / {} meetings (loading)",
+                self.today.commits.total,
+                self.today.sessions.count,
+                self.today.meetings.done + self.today.meetings.upcoming
+            ),
+            theme::dim(),
+        ));
         f.render_widget(Paragraph::new(vec![title, body]), area);
     }
 }
@@ -53,6 +138,64 @@ fn day_boundaries(now: jiff::Zoned) -> (SystemTime, SystemTime) {
         civil_midnight_systemtime(today_date, &tz),
         civil_midnight_systemtime(yesterday_date, &tz),
     )
+}
+
+fn git_log_rows(
+    repo: &Path,
+    since: &str,
+    until: &str,
+) -> Vec<(String, String, String, String)> {
+    let res = Command::new("git")
+        .arg("-C").arg(repo)
+        .args([
+            "log",
+            &format!("--since={since}"),
+            &format!("--until={until}"),
+            "--format=%cI|%H|%s",
+            "--all",
+            "--no-merges",
+        ])
+        .output();
+    let stdout = match res {
+        Ok(o) if o.status.success() => o.stdout,
+        _ => return Vec::new(),
+    };
+    let repo_label = repo.to_string_lossy().to_string();
+    let mut out = Vec::new();
+    for line in String::from_utf8_lossy(&stdout).lines() {
+        let mut parts = line.splitn(3, '|');
+        let (Some(ci), Some(sha), Some(subj)) = (parts.next(), parts.next(), parts.next())
+        else { continue };
+        out.push((repo_label.clone(), ci.to_string(), sha.to_string(), subj.to_string()));
+    }
+    out
+}
+
+fn format_iso(t: SystemTime) -> String {
+    let secs = t.duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64).unwrap_or(0);
+    jiff::Timestamp::from_second(secs)
+        .map(|ts| ts.to_string())
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn scan_commits(
+    today_start: SystemTime,
+    yesterday_start: SystemTime,
+) -> (CommitsSnapshot, CommitsSnapshot) {
+    let today_iso = format_iso(today_start);
+    let yesterday_iso = format_iso(yesterday_start);
+    let now_iso = format_iso(SystemTime::now());
+
+    let mut today_rows = Vec::new();
+    let mut yesterday_rows = Vec::new();
+    for root in project_roots() {
+        for repo in find_repos(&root) {
+            today_rows.extend(git_log_rows(&repo, &today_iso, &now_iso));
+            yesterday_rows.extend(git_log_rows(&repo, &yesterday_iso, &today_iso));
+        }
+    }
+    (summarize_commits(&today_rows), summarize_commits(&yesterday_rows))
 }
 
 #[derive(Default, Clone, Debug)]

@@ -44,7 +44,7 @@ impl CommitsPanel {
     }
 }
 
-fn project_roots() -> Vec<PathBuf> {
+pub(crate) fn project_roots() -> Vec<PathBuf> {
     if let Ok(s) = std::env::var("WT_ROOTS") {
         return s
             .split(':')
@@ -59,7 +59,7 @@ fn project_roots() -> Vec<PathBuf> {
     vec![home.join("projects"), home.join("Projects")]
 }
 
-fn find_repos(root: &Path) -> Vec<PathBuf> {
+pub(crate) fn find_repos(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let entries = match std::fs::read_dir(root) {
         Ok(e) => e,
