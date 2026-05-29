@@ -2,13 +2,13 @@
 //! if not in tmux); c = copy the resume command.
 use crate::clip;
 use crate::crew::{CrewAction, CrewCore};
+use crate::spawn;
 use crate::panels::Panel;
 use crossterm::event::KeyEvent;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
-use std::process::Command;
 
 pub struct CrewPanel {
     core: CrewCore,
@@ -40,16 +40,9 @@ impl Panel for CrewPanel {
                 true
             }
             CrewAction::Drop { command, cwd, claude } => {
-                if std::env::var("TMUX").is_ok() {
-                    let mut c = Command::new("tmux");
-                    c.arg("new-window");
-                    if let Some(dir) = &cwd {
-                        c.arg("-c").arg(dir);
-                    }
-                    for part in claude.split(' ') {
-                        c.arg(part);
-                    }
-                    let ok = c.status().map(|s| s.success()).unwrap_or(false);
+                if spawn::in_tmux() {
+                    let argv: Vec<&str> = claude.split(' ').collect();
+                    let ok = spawn::tmux_new_window(cwd.as_deref(), &argv);
                     self.toast = Some(if ok { "opened in new tmux window".into() } else { "tmux failed".into() });
                 } else {
                     clip::copy(&command);
