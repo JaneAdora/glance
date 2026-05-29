@@ -151,7 +151,10 @@ fn minutes_until_secs(start_secs: i64, now_secs: i64) -> i64 {
 
 impl Panel for StandupPanel {
     fn name(&self) -> &str { "standup" }
-    fn refresh_ms(&self) -> u64 { 60_000 }
+    // Tick fast so the channel drains within ~2s of the scan threads finishing
+    // and the next-meeting countdown stays fresh. The git/session scans themselves
+    // stay gated to every 5 min via the last_*_scan staleness checks in tick().
+    fn refresh_ms(&self) -> u64 { 2_000 }
 
     fn tick(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
