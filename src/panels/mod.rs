@@ -31,6 +31,7 @@ pub mod launchers;
 pub mod music;
 pub mod solar;
 pub mod starfield;
+pub mod standup;
 pub mod tasks;
 pub mod weather;
 pub mod world_ping;
@@ -64,7 +65,7 @@ pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "cal", "crew", "tasks",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "cal", "crew", "tasks", "standup",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
@@ -72,7 +73,7 @@ pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "cal", "crew", "tasks",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "cal", "crew", "tasks", "standup",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -114,6 +115,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "cal" => Box::new(cal::CalPanel::new()),
         "crew" => Box::new(crew::CrewPanel::new()),
         "tasks" => Box::new(tasks::TasksPanel::new()),
+        "standup" => Box::new(standup::StandupPanel::new()),
         _ => return None,
     })
 }
@@ -132,4 +134,21 @@ pub fn registry_from_names(names: &[String]) -> Vec<Box<dyn Panel>> {
 /// Default registry: every panel in DEFAULT_ORDER.
 pub fn default_registry() -> Vec<Box<dyn Panel>> {
     DEFAULT_ORDER.iter().filter_map(|n| build_panel(n)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_panel_knows_standup() {
+        let p = build_panel("standup");
+        assert!(p.is_some(), "build_panel should return Some for \"standup\"");
+        assert_eq!(p.unwrap().name(), "standup");
+    }
+
+    #[test]
+    fn standup_is_in_all_panels() {
+        assert!(ALL_PANELS.iter().any(|n| *n == "standup"));
+    }
 }
