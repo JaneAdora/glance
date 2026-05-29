@@ -81,6 +81,33 @@ fn summarize_commits(lines: &[(String, String, String, String)]) -> CommitsSnaps
     }
 }
 
+#[derive(Default, Clone, Debug)]
+pub struct SessionsSnapshot {
+    pub count: u32,
+    /// Most recent mtime within the range, unix seconds.
+    pub last_at: Option<i64>,
+}
+
+fn count_sessions(
+    mtimes: &[SystemTime],
+    start: SystemTime,
+    end: SystemTime,
+) -> SessionsSnapshot {
+    let mut count: u32 = 0;
+    let mut last_at: Option<i64> = None;
+    for m in mtimes {
+        if *m >= start && *m < end {
+            count += 1;
+            let secs = m
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            last_at = Some(last_at.map_or(secs, |prev| prev.max(secs)));
+        }
+    }
+    SessionsSnapshot { count, last_at }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,5 +174,39 @@ mod tests {
         let expected_last: i64 = "2026-05-28T11:30:00-05:00"
             .parse::<jiff::Timestamp>().unwrap().as_second();
         assert_eq!(s.last_at, Some(expected_last));
+    }
+
+    fn t(secs: u64) -> SystemTime {
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn count_sessions_empty_is_zero() {
+        let s = count_sessions(&[], t(0), t(1));
+        assert_eq!(s.count, 0);
+        assert_eq!(s.last_at, None);
+    }
+
+    #[test]
+    fn count_sessions_filters_to_range() {
+        let mtimes = vec![t(100), t(200), t(300), t(400)];
+        let s = count_sessions(&mtimes, t(150), t(350));
+        assert_eq!(s.count, 2);
+        assert_eq!(s.last_at, Some(300));
+    }
+
+    #[test]
+    fn count_sessions_end_is_exclusive() {
+        let mtimes = vec![t(200)];
+        let s = count_sessions(&mtimes, t(100), t(200));
+        assert_eq!(s.count, 0);
+    }
+
+    #[test]
+    fn count_sessions_start_is_inclusive() {
+        let mtimes = vec![t(200)];
+        let s = count_sessions(&mtimes, t(200), t(300));
+        assert_eq!(s.count, 1);
+        assert_eq!(s.last_at, Some(200));
     }
 }
