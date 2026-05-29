@@ -102,6 +102,37 @@ impl LaunchersPanel {
         }
         self.last_kick = Some(Instant::now());
     }
+
+    fn move_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn move_down(&mut self) {
+        self.selected = (self.selected + 1).min(PALETTE.len() - 1);
+    }
+
+    /// Spawn the focused launcher in a new tmux window (bare command), or toast
+    /// if it is not built / not in tmux. We spawn the command name (e.g. "1p"),
+    /// never "op" -- the fork-bomb path is never constructed here.
+    fn spawn_selected(&mut self) {
+        let (name, _, _, built) = PALETTE[self.selected];
+        if !built {
+            self.status = Some((format!("{name}: not built yet"), Instant::now()));
+            return;
+        }
+        if crate::spawn::in_tmux() {
+            let ok = crate::spawn::tmux_new_window(None, &[name]);
+            let msg = if ok {
+                format!("opened {name} in new tmux window")
+            } else {
+                "tmux failed".to_string()
+            };
+            self.status = Some((msg, Instant::now()));
+        } else {
+            crate::clip::copy(name);
+            self.status = Some((format!("no tmux: copied {name}"), Instant::now()));
+        }
+    }
 }
 
 impl Panel for LaunchersPanel {
@@ -199,14 +230,33 @@ impl Panel for LaunchersPanel {
     }
 
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
-        if let crossterm::event::KeyCode::Char(c) = key.code {
-            if let Some((name, _, _, _)) = PALETTE.iter().find(|(_, _, k, _)| *k == c) {
-                crate::clip::copy(name);
-                self.status = Some((format!("copied: {name}"), Instant::now()));
-                return true;
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.move_up();
+                true
             }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.move_down();
+                true
+            }
+            KeyCode::Enter => {
+                self.spawn_selected();
+                true
+            }
+            KeyCode::Char(c) => {
+                if let Some(i) = PALETTE.iter().position(|(_, _, k, _)| *k == c) {
+                    let name = PALETTE[i].0;
+                    crate::clip::copy(name);
+                    self.selected = i;
+                    self.status = Some((format!("copied: {name}"), Instant::now()));
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
-        false
     }
 }
 
@@ -226,5 +276,31 @@ mod tests {
         let expected: HashSet<&str> =
             ["gst", "clip", "1p", "proc", "roam", "wt", "recall", "mm"].into_iter().collect();
         assert_eq!(built, expected);
+    }
+
+    #[test]
+    fn cursor_clamps_at_top() {
+        let mut p = LaunchersPanel::new();
+        p.selected = 0;
+        p.move_up();
+        assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn cursor_clamps_at_bottom() {
+        let mut p = LaunchersPanel::new();
+        p.selected = PALETTE.len() - 1;
+        p.move_down();
+        assert_eq!(p.selected, PALETTE.len() - 1);
+    }
+
+    #[test]
+    fn cursor_moves_within_bounds() {
+        let mut p = LaunchersPanel::new();
+        p.selected = 2;
+        p.move_up();
+        assert_eq!(p.selected, 1);
+        p.move_down();
+        assert_eq!(p.selected, 2);
     }
 }
