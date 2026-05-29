@@ -108,6 +108,62 @@ fn count_sessions(
     SessionsSnapshot { count, last_at }
 }
 
+use crate::cal::event::Event;
+
+#[derive(Clone, Debug)]
+pub struct EventLite {
+    pub start_secs: i64,
+    pub title: String,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct MeetingsSnapshot {
+    pub done: u32,
+    /// Not-yet-finished meetings: in-progress + strictly future. `done + upcoming`
+    /// equals the total counted meetings for the day.
+    pub upcoming: u32,
+    pub next: Option<EventLite>,
+}
+
+/// Splits a day's events into done/upcoming relative to `now`, and selects
+/// the next strictly-future event by start time. Skips all-day, declined, and
+/// events whose timestamps fail to parse.
+fn summarize_meetings(events: &[Event], now: jiff::Timestamp) -> MeetingsSnapshot {
+    let mut done: u32 = 0;
+    let mut upcoming: u32 = 0;
+    let mut next_pair: Option<(i64, String)> = None;
+
+    for ev in events {
+        if ev.all_day || ev.is_declined() {
+            continue;
+        }
+        let Some(start) = ev.start_ts() else { continue };
+        if ev.is_past(&now) {
+            done += 1;
+            continue;
+        }
+        upcoming += 1; // counts a meeting in progress right now, too
+        let start_secs = start.as_second();
+        if start_secs > now.as_second() {
+            // Only a strictly-future event is eligible as "next", so the tile
+            // never prints a clock time that has already passed.
+            let take = match &next_pair {
+                None => true,
+                Some((prev_secs, _)) => start_secs < *prev_secs,
+            };
+            if take {
+                next_pair = Some((start_secs, ev.summary.clone()));
+            }
+        }
+    }
+
+    MeetingsSnapshot {
+        done,
+        upcoming,
+        next: next_pair.map(|(start_secs, title)| EventLite { start_secs, title }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +264,115 @@ mod tests {
         let s = count_sessions(&mtimes, t(200), t(300));
         assert_eq!(s.count, 1);
         assert_eq!(s.last_at, Some(200));
+    }
+
+    use crate::cal::event::{Attendee, ResponseStatus};
+
+    fn make_event(start: &str, end: &str, title: &str) -> Event {
+        Event {
+            id: title.into(),
+            summary: title.into(),
+            description: String::new(),
+            location: String::new(),
+            start: start.into(),
+            end: end.into(),
+            all_day: false,
+            status: "confirmed".into(),
+            html_link: String::new(),
+            hangout_link: String::new(),
+            meet_url: String::new(),
+            attendees: vec![Attendee {
+                email: "jane@repcap.com".into(),
+                name: "Jane".into(),
+                response_status: ResponseStatus::Accepted,
+                is_self: true,
+                organizer: false,
+            }],
+            is_recurring: false,
+            recurring_event_id: String::new(),
+            calendar_id: "primary".into(),
+        }
+    }
+
+    #[test]
+    fn summarize_meetings_empty_is_zero() {
+        let now: jiff::Timestamp = "2026-05-28T14:00:00-05:00".parse().unwrap();
+        let s = summarize_meetings(&[], now);
+        assert_eq!(s.done, 0);
+        assert_eq!(s.upcoming, 0);
+        assert!(s.next.is_none());
+    }
+
+    #[test]
+    fn summarize_meetings_splits_by_now() {
+        let now: jiff::Timestamp = "2026-05-28T14:00:00-05:00".parse().unwrap();
+        let events = vec![
+            make_event("2026-05-28T09:00:00-05:00", "2026-05-28T09:30:00-05:00", "morning"),
+            make_event("2026-05-28T13:00:00-05:00", "2026-05-28T13:30:00-05:00", "lunch"),
+            make_event("2026-05-28T16:00:00-05:00", "2026-05-28T16:30:00-05:00", "thelma sync"),
+            make_event("2026-05-28T17:00:00-05:00", "2026-05-28T17:30:00-05:00", "wrap"),
+        ];
+        let s = summarize_meetings(&events, now);
+        assert_eq!(s.done, 2);
+        assert_eq!(s.upcoming, 2);
+        let next = s.next.expect("next event present");
+        assert_eq!(next.title, "thelma sync");
+        let expected_start: i64 = "2026-05-28T16:00:00-05:00"
+            .parse::<jiff::Timestamp>().unwrap().as_second();
+        assert_eq!(next.start_secs, expected_start);
+    }
+
+    #[test]
+    fn summarize_meetings_skips_declined() {
+        let now: jiff::Timestamp = "2026-05-28T14:00:00-05:00".parse().unwrap();
+        let mut declined = make_event(
+            "2026-05-28T16:00:00-05:00",
+            "2026-05-28T16:30:00-05:00",
+            "declined",
+        );
+        declined.attendees[0].response_status = ResponseStatus::Declined;
+        let kept = make_event(
+            "2026-05-28T17:00:00-05:00",
+            "2026-05-28T17:30:00-05:00",
+            "kept",
+        );
+        let s = summarize_meetings(&[declined, kept], now);
+        assert_eq!(s.done, 0);
+        assert_eq!(s.upcoming, 1);
+        assert_eq!(s.next.unwrap().title, "kept");
+    }
+
+    #[test]
+    fn summarize_meetings_skips_all_day() {
+        let now: jiff::Timestamp = "2026-05-28T14:00:00-05:00".parse().unwrap();
+        let mut all_day = make_event("2026-05-28", "2026-05-29", "OOO");
+        all_day.all_day = true;
+        let timed = make_event(
+            "2026-05-28T16:00:00-05:00",
+            "2026-05-28T16:30:00-05:00",
+            "real",
+        );
+        let s = summarize_meetings(&[all_day, timed], now);
+        assert_eq!(s.upcoming, 1);
+        assert_eq!(s.next.unwrap().title, "real");
+    }
+
+    #[test]
+    fn summarize_meetings_in_progress_counts_but_is_not_next() {
+        let now: jiff::Timestamp = "2026-05-28T14:00:00-05:00".parse().unwrap();
+        let in_progress = make_event(
+            "2026-05-28T13:45:00-05:00",
+            "2026-05-28T14:30:00-05:00",
+            "in progress",
+        );
+        let later = make_event(
+            "2026-05-28T16:00:00-05:00",
+            "2026-05-28T16:30:00-05:00",
+            "later",
+        );
+        let s = summarize_meetings(&[in_progress, later], now);
+        assert_eq!(s.done, 0);
+        assert_eq!(s.upcoming, 2); // both not-yet-finished
+        assert_eq!(s.next.unwrap().title, "later"); // in-progress skipped as "next"
     }
 }
