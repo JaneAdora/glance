@@ -11,6 +11,7 @@ pub mod header;
 pub mod health;
 pub mod layout;
 pub mod panels;
+pub mod spawn;
 pub mod tasks;
 pub mod theme;
 pub mod widgets;

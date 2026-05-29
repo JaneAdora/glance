@@ -16,24 +16,25 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// (name, description, shortcut). The full family; cards exist only for some.
-const PALETTE: &[(&str, &str, char)] = &[
-    ("gst", "git status/log", 'g'),
-    ("clip", "clipboard", 'c'),
-    ("1p", "1password", 'o'),
-    ("proc", "processes", 'P'),
-    ("roam", "directories", 'R'),
-    ("wt", "git worktrees", 'w'),
-    ("recall", "cc sessions", 'l'),
-    ("docker", "containers", 'd'),
-    ("svc", "services", 's'),
-    ("ssh", "hosts", 'h'),
-    ("note", "journal", 'N'),
-    ("gh", "PR triage", 'G'),
-    ("port", "listeners", 't'),
-    ("agent", "AI sessions", 'a'),
-    ("hub", "hubspot portals", 'b'),
-    ("mm", "miss minutes", 'm'),
+/// (name, description, shortcut, built). `built` gates the spawn action; the
+/// full family is listed, but only genuine suite launchers are spawnable.
+const PALETTE: &[(&str, &str, char, bool)] = &[
+    ("gst", "git status/log", 'g', true),
+    ("clip", "clipboard", 'c', true),
+    ("1p", "1password", 'o', true),
+    ("proc", "processes", 'P', true),
+    ("roam", "directories", 'R', true),
+    ("wt", "git worktrees", 'w', true),
+    ("recall", "cc sessions", 'l', true),
+    ("docker", "containers", 'd', false),
+    ("svc", "services", 's', false),
+    ("ssh", "hosts", 'h', false),
+    ("note", "journal", 'N', false),
+    ("gh", "PR triage", 'G', false),
+    ("port", "listeners", 't', false),
+    ("agent", "AI sessions", 'a', false),
+    ("hub", "hubspot portals", 'b', false),
+    ("mm", "miss minutes", 'm', true),
 ];
 
 /// Launchers that expose a live glance card, and the binary to call for it.
@@ -49,8 +50,11 @@ pub struct LaunchersPanel {
     tx: mpsc::Sender<(String, Option<String>)>,
     /// launcher names with an in-flight worker, so we never double-spawn.
     inflight: Arc<Mutex<HashSet<String>>>,
-    /// Last command name copied to the clipboard, for a transient toast.
-    copied: Option<(String, Instant)>,
+    /// Transient status message (copied / opened / not-built / no-tmux), shown
+    /// in the title for 3s. Generalized from the old copy-only toast.
+    status: Option<(String, Instant)>,
+    /// Cursor index into PALETTE for the spawn action.
+    selected: usize,
 }
 
 impl LaunchersPanel {
@@ -62,7 +66,8 @@ impl LaunchersPanel {
             rx,
             tx,
             inflight: Arc::new(Mutex::new(HashSet::new())),
-            copied: None,
+            status: None,
+            selected: 0,
         }
     }
 
@@ -96,6 +101,37 @@ impl LaunchersPanel {
             });
         }
         self.last_kick = Some(Instant::now());
+    }
+
+    fn move_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn move_down(&mut self) {
+        self.selected = (self.selected + 1).min(PALETTE.len() - 1);
+    }
+
+    /// Spawn the focused launcher in a new tmux window (bare command), or toast
+    /// if it is not built / not in tmux. We spawn the command name (e.g. "1p"),
+    /// never "op" -- the fork-bomb path is never constructed here.
+    fn spawn_selected(&mut self) {
+        let (name, _, _, built) = PALETTE[self.selected];
+        if !built {
+            self.status = Some((format!("{name}: not built yet"), Instant::now()));
+            return;
+        }
+        if crate::spawn::in_tmux() {
+            let ok = crate::spawn::tmux_new_window(None, &[name]);
+            let msg = if ok {
+                format!("opened {name} in new tmux window")
+            } else {
+                "tmux failed".to_string()
+            };
+            self.status = Some((msg, Instant::now()));
+        } else {
+            crate::clip::copy(name);
+            self.status = Some((format!("no tmux: copied {name}"), Instant::now()));
+        }
     }
 }
 
@@ -148,20 +184,31 @@ impl Panel for LaunchersPanel {
             .split(area);
 
         let mut title = vec![Span::styled(" launchers", theme::pane_header())];
-        if let Some((name, ts)) = &self.copied {
+        if let Some((msg, ts)) = &self.status {
             if ts.elapsed() < Duration::from_secs(3) {
-                title.push(Span::styled(format!("   copied: {name}"), theme::now()));
+                title.push(Span::styled(format!("   {msg}"), theme::now()));
             }
         }
         f.render_widget(Paragraph::new(Line::from(title)), chunks[0]);
 
         let rows: Vec<Line> = PALETTE
             .iter()
-            .map(|(name, desc, key)| {
+            .enumerate()
+            .map(|(i, (name, desc, key, built))| {
+                let focused = i == self.selected;
+                let gutter = if focused { "▸ " } else { "  " };
+                let name_style = if !*built {
+                    theme::dim()
+                } else if focused {
+                    theme::active_row()
+                } else {
+                    theme::pane_header()
+                };
+                let key_style = if *built { theme::historical() } else { theme::dim() };
                 Line::from(vec![
-                    Span::styled(format!("  {name:<7}"), theme::pane_header_focused()),
+                    Span::styled(format!("{gutter}{name:<7}"), name_style),
                     Span::styled(format!("{desc:<16}"), theme::dim()),
-                    Span::styled(format!("[{key}]"), theme::historical()),
+                    Span::styled(format!("[{key}]"), key_style),
                 ])
             })
             .collect();
@@ -183,14 +230,77 @@ impl Panel for LaunchersPanel {
     }
 
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
-        if let crossterm::event::KeyCode::Char(c) = key.code {
-            if let Some((name, _, _)) = PALETTE.iter().find(|(_, _, k)| *k == c) {
-                crate::clip::copy(name);
-                self.copied = Some((name.to_string(), Instant::now()));
-                return true;
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.move_up();
+                true
             }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.move_down();
+                true
+            }
+            KeyCode::Enter => {
+                self.spawn_selected();
+                true
+            }
+            KeyCode::Char(c) => {
+                if let Some(i) = PALETTE.iter().position(|(_, _, k, _)| *k == c) {
+                    let name = PALETTE[i].0;
+                    crate::clip::copy(name);
+                    self.selected = i;
+                    self.status = Some((format!("copied: {name}"), Instant::now()));
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
-        false
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn built_set_is_exact() {
+        let built: HashSet<&str> = PALETTE
+            .iter()
+            .filter(|(_, _, _, b)| *b)
+            .map(|(n, _, _, _)| *n)
+            .collect();
+        let expected: HashSet<&str> =
+            ["gst", "clip", "1p", "proc", "roam", "wt", "recall", "mm"].into_iter().collect();
+        assert_eq!(built, expected);
+    }
+
+    #[test]
+    fn cursor_clamps_at_top() {
+        let mut p = LaunchersPanel::new();
+        p.selected = 0;
+        p.move_up();
+        assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn cursor_clamps_at_bottom() {
+        let mut p = LaunchersPanel::new();
+        p.selected = PALETTE.len() - 1;
+        p.move_down();
+        assert_eq!(p.selected, PALETTE.len() - 1);
+    }
+
+    #[test]
+    fn cursor_moves_within_bounds() {
+        let mut p = LaunchersPanel::new();
+        p.selected = 2;
+        p.move_up();
+        assert_eq!(p.selected, 1);
+        p.move_down();
+        assert_eq!(p.selected, 2);
+    }
+}
