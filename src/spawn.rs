@@ -23,6 +23,10 @@ pub fn tmux_argv(cwd: Option<&str>, args: &[&str]) -> Vec<String> {
 pub fn tmux_new_window(cwd: Option<&str>, args: &[&str]) -> bool {
     Command::new("tmux")
         .args(tmux_argv(cwd, args))
+        // Null the child's stdout/stderr: an inherited tmux error (e.g. "no
+        // server running") would land on the caller's alt-screen and corrupt it.
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
