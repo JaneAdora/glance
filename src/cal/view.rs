@@ -91,7 +91,7 @@ pub fn now_marker_index(events: &[Event], now: &Timestamp) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cal::event::ResponseStatus;
+    
 
     fn ev(id: &str, start: &str, end: &str, all_day: bool) -> Event {
         Event {

@@ -500,7 +500,7 @@ fn fmt_start(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cal::event::ResponseStatus;
+    
     use crate::cal::view::DayGroup;
     use jiff::civil::Date;
 
