@@ -64,13 +64,8 @@ fn main() -> Result<()> {
 
     // Restore the terminal on panic so a crash prints its error to stderr
     // instead of leaving the alternate screen up with the message swallowed
-    // (which looks like an opaque freeze/crash).
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
-        let _ = crossterm::terminal::disable_raw_mode();
-        default_hook(info);
-    }));
+    // (which looks like an opaque freeze/crash). Install BEFORE raw mode.
+    suite_term::panic::install_panic_hook();
 
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();

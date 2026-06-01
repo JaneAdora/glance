@@ -46,6 +46,8 @@ fn main() -> Result<()> {
 
     let mut core = HealthCore::new();
 
+    // Restore the terminal on panic (before entering raw mode + alt screen).
+    suite_term::panic::install_panic_hook();
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     crossterm::execute!(

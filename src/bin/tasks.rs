@@ -109,6 +109,8 @@ fn main() -> Result<()> {
         }
     }
 
+    // Restore the terminal on panic (before entering raw mode + alt screen).
+    suite_term::panic::install_panic_hook();
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     crossterm::execute!(
@@ -269,12 +271,9 @@ fn run<B: ratatui::backend::Backend>(
 fn build_resume_command(core: &TasksCore) -> Option<String> {
     let g = core.groups.get(core.focus.group)?;
     let sid = &g.session_id;
-    let resume = format!("claude --resume {}", sid);
+    let resume = format!("claude --resume {}", suite_term::quote::shell_quote(sid));
     match session::cwd_for(sid) {
-        Some(cwd) => {
-            let escaped = cwd.replace('\'', "'\\''");
-            Some(format!("cd '{}' && {}", escaped, resume))
-        }
+        Some(cwd) => Some(format!("cd {} && {}", suite_term::quote::shell_quote(&cwd), resume)),
         None => Some(resume),
     }
 }

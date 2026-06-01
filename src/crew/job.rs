@@ -129,16 +129,17 @@ impl Job {
         };
         let claude = format!(
             "claude --resume {} --dangerously-skip-permissions",
-            self.resume_id()
+            suite_term::quote::shell_quote(self.resume_id())
         );
         (cwd, claude)
     }
 
-    /// Shell command: `cd '<cwd>' && claude --resume <id> --dangerously-skip-permissions`.
+    /// Shell command: `cd <cwd> && claude --resume <id> --dangerously-skip-permissions`
+    /// (cwd/id shell-quoted only when they contain metacharacters).
     pub fn resume_command(&self) -> String {
         let (cwd, claude) = self.resume_parts();
         match cwd {
-            Some(c) => format!("cd '{}' && {}", c.replace('\'', "'\\''"), claude),
+            Some(c) => format!("cd {} && {}", suite_term::quote::shell_quote(&c), claude),
             None => claude,
         }
     }
@@ -222,7 +223,7 @@ mod tests {
         let j = Job { cwd: "/home/jane".into(), resume_session_id: "abc-123".into(), ..Default::default() };
         assert_eq!(
             j.resume_command(),
-            "cd '/home/jane' && claude --resume abc-123 --dangerously-skip-permissions"
+            "cd /home/jane && claude --resume abc-123 --dangerously-skip-permissions"
         );
         let j2 = Job { cwd: "/home/jane's dir".into(), resume_session_id: "x".into(), ..Default::default() };
         assert_eq!(

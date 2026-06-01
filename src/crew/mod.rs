@@ -271,7 +271,7 @@ mod tests {
         match c.handle_key(key('d')) {
             CrewAction::Drop { command, claude, cwd } => {
                 assert!(command.contains("--dangerously-skip-permissions"));
-                assert!(command.starts_with("cd '/w' && "));
+                assert!(command.starts_with("cd /w && "));
                 assert_eq!(claude, "claude --resume a-id --dangerously-skip-permissions");
                 assert_eq!(cwd, Some("/w".to_string()));
             }
@@ -284,7 +284,7 @@ mod tests {
         let mut c = core_with(vec![job("a", "done")]);
         assert_eq!(
             c.handle_key(key('c')),
-            CrewAction::Copy { command: "cd '/w' && claude --resume a-id --dangerously-skip-permissions".into() }
+            CrewAction::Copy { command: "cd /w && claude --resume a-id --dangerously-skip-permissions".into() }
         );
     }
 
