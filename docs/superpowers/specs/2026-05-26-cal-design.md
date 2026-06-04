@@ -275,14 +275,14 @@ A thin horizontal separator line `─── NOW ───` rendered between the 
 ```
 ┌─ Daily Huddle · Tue May 26 ──────────────────────────┐
 │ 09:00–09:30 · 30 min · in 18 min                     │
-│ 📹 https://meet.google.com/abc-defg-hij               │
+│ 📹 https://meet.google.com/abc-defg-hij                │
 │                                                       │
 │ Attendees (10)                                        │
-│   ★ ✓ Avery Quinn      <avery@example.com>  │
+│   ★ ✓ Avery Quinn             <avery@example.com>     │
 │     ✓ Jane Mitchell (you)     <jane@repcap.com>       │
-│     ✓ Jordan Lee               <jordan@example.com>    │
-│     ? Sam Carter             <sam@example.com>      │
-│     ✗ Pat Morgan           <pat@example.com>       │
+│     ✓ Jordan Lee              <jordan@example.com>    │
+│     ? Sam Carter              <sam@example.com>       │
+│     ✗ Pat Morgan              <pat@example.com>       │
 │   …5 more                                              │
 │                                                       │
 │ Description                                            │
@@ -290,7 +290,7 @@ A thin horizontal separator line `─── NOW ───` rendered between the 
 │   options for your checkin here: On Track / Off…      │
 │                                                       │
 │ Links                                                  │
-│   • https://otter.ai/mt/example-transcript-id   │
+│   • https://otter.ai/mt/example-transcript-id         │
 │   • https://www.google.com/calendar/event?eid=…       │
 │                                                       │
 │ Esc / Enter / q / h / Left to close                   │
