@@ -345,8 +345,9 @@ impl CalCore {
 
         let mut lines: Vec<Line> = Vec::new();
         if self.days.is_empty() {
-            let msg = if self.last_fetched.is_none() { "loading..." } else { "no events this week" };
-            lines.push(Line::from(Span::styled(msg, crate::theme::dim())));
+            for msg in empty_state_lines(self.last_fetched.is_some(), self.last_fetch_error.as_deref()) {
+                lines.push(Line::from(Span::styled(msg, crate::theme::dim())));
+            }
         }
         for (di, day) in self.days.iter().enumerate() {
             let expanded = self.expanded.contains(&day.date);
@@ -497,6 +498,25 @@ fn fmt_start(s: &str) -> String {
     s.to_string()
 }
 
+/// Lines for the cal panel's empty state (no day rows). Surfaces a fetch error,
+/// and a hint for the Jane-specific calendar bridge, instead of showing
+/// "loading..." forever on a machine without the shim.
+fn empty_state_lines(has_fetched: bool, last_error: Option<&str>) -> Vec<String> {
+    if let Some(e) = last_error {
+        if e.starts_with("shim missing") {
+            return vec![
+                "calendar bridge unavailable".to_string(),
+                "set GLANCE_CAL_SHIM to your cal_json.py (see README)".to_string(),
+            ];
+        }
+        return vec![format!("calendar error: {e}")];
+    }
+    if !has_fetched {
+        return vec!["loading...".to_string()];
+    }
+    vec!["no events this week".to_string()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,6 +552,30 @@ mod tests {
             last_fetched: Some(Instant::now()),
             last_toast: None, stale_cache: false, last_fetch_error: None, rx: None,
         }
+    }
+
+    #[test]
+    fn empty_state_loading_before_first_fetch() {
+        assert_eq!(empty_state_lines(false, None), vec!["loading...".to_string()]);
+    }
+
+    #[test]
+    fn empty_state_no_events_after_fetch() {
+        assert_eq!(empty_state_lines(true, None), vec!["no events this week".to_string()]);
+    }
+
+    #[test]
+    fn empty_state_shim_missing_shows_hint() {
+        let lines = empty_state_lines(false, Some("shim missing at /home/u/cal_json.py"));
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("unavailable"));
+        assert!(lines[1].contains("GLANCE_CAL_SHIM"));
+    }
+
+    #[test]
+    fn empty_state_other_error_is_surfaced() {
+        let lines = empty_state_lines(true, Some("bridge error: boom"));
+        assert_eq!(lines, vec!["calendar error: bridge error: boom".to_string()]);
     }
 
     #[test]
