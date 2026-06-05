@@ -100,17 +100,32 @@ fn playerctl(target: &Option<String>, args: &[&str]) -> Option<String> {
 }
 
 fn marquee(text: &str, width: usize, t: f64) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= width {
+    use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+    if UnicodeWidthStr::width(text) <= width {
         return text.to_string();
     }
-    // Scroll with a gap, wrapping around.
+    // Scroll with a gap, wrapping around. `width` is a cell count, and CJK or
+    // emoji glyphs are two cells wide, so fill the window by display width (not
+    // char count) and pad to exactly `width` so it never overflows the panel.
     let gap = "   •   ";
     let full: Vec<char> = format!("{text}{gap}").chars().collect();
     let offset = (t * 3.0) as usize % full.len();
     let mut out = String::new();
-    for i in 0..width {
-        out.push(full[(offset + i) % full.len()]);
+    let mut cells = 0usize;
+    let mut i = 0usize;
+    while cells < width && i < full.len() {
+        let c = full[(offset + i) % full.len()];
+        let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+        if cells + cw > width {
+            break;
+        }
+        out.push(c);
+        cells += cw;
+        i += 1;
+    }
+    while cells < width {
+        out.push(' ');
+        cells += 1;
     }
     out
 }
@@ -367,6 +382,27 @@ impl Panel for MusicPanel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marquee_returns_short_text_unchanged() {
+        assert_eq!(marquee("hi", 10, 0.0), "hi");
+    }
+
+    #[test]
+    fn marquee_caps_ascii_to_width() {
+        use unicode_width::UnicodeWidthStr;
+        assert_eq!(UnicodeWidthStr::width(marquee("abcdefghijklmnop", 8, 0.0).as_str()), 8);
+    }
+
+    #[test]
+    fn marquee_never_overflows_with_wide_glyphs() {
+        use unicode_width::UnicodeWidthStr;
+        let cjk = "스트레이키즈 인스 청색 라이브 방송";
+        for step in 0..20 {
+            let out = marquee(cjk, 9, step as f64);
+            assert!(UnicodeWidthStr::width(out.as_str()) <= 9, "overflow at {step}: {out:?}");
+        }
+    }
 
     fn players() -> Vec<String> {
         vec!["spotify".to_string(), "chromium.instance1".to_string()]
