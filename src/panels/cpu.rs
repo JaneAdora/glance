@@ -24,6 +24,16 @@ impl CpuPanel {
         let cores = (0..sys.cpus().len()).map(|_| VecDeque::with_capacity(HIST)).collect();
         Self { sys, cores }
     }
+
+    /// Overall CPU usage: the mean of the latest per-core sample. Returns 0
+    /// before the first tick (no history yet).
+    pub fn overall_pct(&self) -> u16 {
+        if self.cores.is_empty() {
+            return 0;
+        }
+        let sum: u64 = self.cores.iter().map(|c| c.back().copied().unwrap_or(0)).sum();
+        (sum / self.cores.len() as u64) as u16
+    }
 }
 
 impl Panel for CpuPanel {
@@ -143,5 +153,15 @@ impl Panel for CpuPanel {
                 .title(Line::from(Span::styled(" Top processes ", theme::pane_header()))),
         );
         f.render_widget(table, split[1]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overall_pct_is_zero_before_tick() {
+        assert_eq!(CpuPanel::new().overall_pct(), 0);
     }
 }

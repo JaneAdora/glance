@@ -25,7 +25,7 @@ impl MemPanel {
         }
     }
 
-    fn used_pct(&self) -> u16 {
+    pub fn used_pct(&self) -> u16 {
         let total = self.sys.total_memory().max(1);
         let used = self.sys.used_memory();
         ((used * 100) / total) as u16
@@ -145,5 +145,16 @@ impl Panel for MemPanel {
             .max(100)
             .style(theme::historical());
         f.render_widget(spark, chunks[2]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn used_pct_is_a_percentage() {
+        // new() refreshes memory, so total_memory > 0 and the ratio is in range.
+        assert!(MemPanel::new().used_pct() <= 100);
     }
 }

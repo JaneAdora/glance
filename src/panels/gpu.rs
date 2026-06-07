@@ -35,6 +35,33 @@ impl GpuPanel {
             util_hist: VecDeque::with_capacity(HIST),
         }
     }
+
+    /// GPU utilization percent, or None when no NVIDIA GPU is available.
+    pub fn util(&self) -> Option<u16> {
+        if self.available {
+            Some(self.gpu.util)
+        } else {
+            None
+        }
+    }
+
+    /// VRAM (used, total) in MiB, or None when unavailable.
+    pub fn vram(&self) -> Option<(u64, u64)> {
+        if self.available {
+            Some((self.gpu.mem_used, self.gpu.mem_total))
+        } else {
+            None
+        }
+    }
+
+    /// GPU temperature in celsius, or None when unavailable.
+    pub fn temp(&self) -> Option<u16> {
+        if self.available {
+            Some(self.gpu.temp)
+        } else {
+            None
+        }
+    }
 }
 
 fn query_gpu() -> Option<GpuStat> {
@@ -182,5 +209,18 @@ impl Panel for GpuPanel {
             .max(100)
             .style(Style::default().fg(theme::pink()));
         f.render_widget(spark, chunks[4]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accessors_are_none_before_tick() {
+        let p = GpuPanel::new();
+        assert_eq!(p.util(), None);
+        assert_eq!(p.vram(), None);
+        assert_eq!(p.temp(), None);
     }
 }
