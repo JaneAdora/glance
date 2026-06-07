@@ -21,6 +21,12 @@ impl TempPanel {
     pub fn new() -> Self {
         Self { zones: Vec::new() }
     }
+
+    /// The hottest thermal zone's temperature in celsius, or None when no zone
+    /// is readable. Zones are kept sorted hottest-first by `tick`.
+    pub fn hottest(&self) -> Option<f64> {
+        self.zones.first().map(|z| z.celsius)
+    }
 }
 
 fn read_zones() -> Vec<Zone> {
@@ -157,5 +163,15 @@ impl Panel for TempPanel {
             .data(BarGroup::default().bars(&bars))
             .label_style(theme::dim());
         f.render_widget(chart, chunks[1]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hottest_is_none_before_tick() {
+        assert_eq!(TempPanel::new().hottest(), None);
     }
 }
