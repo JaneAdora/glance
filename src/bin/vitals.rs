@@ -12,7 +12,7 @@ use glance::panels::mem::MemPanel;
 use glance::panels::net::NetPanel;
 use glance::panels::temp::TempPanel;
 use glance::panels::Panel;
-use glance::vitals::{combine_temp, status_line, Status, Vitals};
+use glance::vitals::{choose_mode, combine_temp, status_line, Mode, Status, Vitals};
 use glance::{brightness, theme};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -152,11 +152,76 @@ fn render_vitals_row(f: &mut Frame, area: Rect, v: &Vitals, gpu_vram: Option<(u6
     );
 }
 
+/// Render the 3x2 detail grid: [cpu | mem] / [gpu | thermals] / [disk | net+io].
+/// The thermals and net+io cells stack two panels vertically.
+fn render_grid(f: &mut Frame, area: Rect, c: &Cockpit) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Ratio(1, 3),
+            Constraint::Ratio(1, 3),
+            Constraint::Ratio(1, 3),
+        ])
+        .split(area);
+
+    let split_cols = |r: Rect| {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .split(r)
+    };
+    let split_stack = |r: Rect| {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .split(r)
+    };
+
+    let r0 = split_cols(rows[0]);
+    c.cpu.render(f, r0[0]);
+    c.mem.render(f, r0[1]);
+
+    let r1 = split_cols(rows[1]);
+    c.gpu.render(f, r1[0]);
+    let thermals = split_stack(r1[1]);
+    c.temp.render(f, thermals[0]);
+    c.fans.render(f, thermals[1]);
+
+    let r2 = split_cols(rows[2]);
+    c.disk.render(f, r2[0]);
+    let netio = split_stack(r2[1]);
+    c.net.render(f, netio[0]);
+    c.io.render(f, netio[1]);
+}
+
 fn draw(f: &mut Frame, c: &Cockpit) {
     let area = f.area();
     let v = c.read_vitals();
     let gpu_vram = c.gpu.vram();
-    render_vitals_row(f, area, &v, gpu_vram);
+    match choose_mode(area.width, area.height) {
+        Mode::Compact => {
+            render_vitals_row(f, area, &v, gpu_vram);
+        }
+        Mode::Full => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(2), // vitals row (2 lines)
+                    Constraint::Length(1), // separator
+                    Constraint::Min(3),    // detail grid
+                ])
+                .split(area);
+            render_vitals_row(f, chunks[0], &v, gpu_vram);
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    "─".repeat(area.width as usize),
+                    theme::dim(),
+                ))),
+                chunks[1],
+            );
+            render_grid(f, chunks[2], c);
+        }
+    }
 }
 
 fn main() -> Result<()> {
