@@ -67,7 +67,8 @@ Four big readouts, left to right, answering the four worries:
 Below the four numbers, a one-line status:
 
 - `ALL NOMINAL` when every readable metric is under its alarm threshold.
-- Otherwise a list of offenders, e.g. `GPU 94%  ·  CPU 88°C`.
+- Otherwise a list of offenders, e.g. `GPU 94%  ·  CPU 92%  ·  TEMP 84°C`
+  (CPU/RAM/GPU shown as a percentage, TEMP in celsius).
 
 Each metric is classified into two tiers for v1:
 
