@@ -104,22 +104,6 @@ pub fn status_line(v: &Vitals) -> String {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Full,
-    Compact,
-}
-
-/// Full layout (vitals row + detail grid) only when the terminal is wide AND
-/// tall enough; otherwise Compact (vitals row only) for SSH / phone.
-pub fn choose_mode(width: u16, height: u16) -> Mode {
-    if width >= 70 && height >= 14 {
-        Mode::Full
-    } else {
-        Mode::Compact
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,13 +156,5 @@ mod tests {
         assert!(!calm.any_alarm());
         let hot = Vitals { cpu: Some(10), ram: Some(20), gpu: None, temp: Some(95.0) };
         assert!(hot.any_alarm());
-    }
-
-    #[test]
-    fn choose_mode_boundaries() {
-        assert_eq!(choose_mode(70, 14), Mode::Full);
-        assert_eq!(choose_mode(69, 14), Mode::Compact);
-        assert_eq!(choose_mode(70, 13), Mode::Compact);
-        assert_eq!(choose_mode(200, 50), Mode::Full);
     }
 }

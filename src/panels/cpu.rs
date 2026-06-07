@@ -34,6 +34,12 @@ impl CpuPanel {
         let sum: u64 = self.cores.iter().map(|c| c.back().copied().unwrap_or(0)).sum();
         (sum / self.cores.len() as u64) as u16
     }
+
+    /// Number of logical CPU cores tracked. Used by the vitals cockpit to size
+    /// the CPU panel's row in the scrollable column so every core shows.
+    pub fn core_count(&self) -> usize {
+        self.cores.len()
+    }
 }
 
 impl Panel for CpuPanel {

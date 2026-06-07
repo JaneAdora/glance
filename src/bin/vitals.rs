@@ -1,6 +1,8 @@
-//! Standalone `vitals` cockpit: a single-screen hardware dashboard showing the
-//! key vitals (CPU / RAM / GPU / hottest temp) all at once, with a big
-//! color-coded readout. Detail grid is added in a later step. q quits.
+//! Standalone `vitals` cockpit: a single-screen hardware dashboard for a quick
+//! "is my hardware OK right now?" check, designed for a phone/SSH terminal. A
+//! color-coded vitals row (CPU / RAM / GPU / hottest temp) stays pinned at the
+//! top; below it the detail panels stack in one full-width, scrollable column.
+//! q quits.
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use glance::panels::cpu::CpuPanel;
@@ -12,8 +14,10 @@ use glance::panels::mem::MemPanel;
 use glance::panels::net::NetPanel;
 use glance::panels::temp::TempPanel;
 use glance::panels::Panel;
-use glance::vitals::{choose_mode, combine_temp, status_line, Mode, Status, Vitals};
+use glance::vitals::{combine_temp, status_line, Status, Vitals};
 use glance::{brightness, theme};
+use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -30,15 +34,16 @@ USAGE:
   vitals --help      Print this message.
   vitals --version   Print version.
 
-SHOWS: CPU / RAM / GPU / hottest-temp at a glance, plus detail panels
-(cpu, mem, gpu, thermals, disk, net, io) when the terminal is large enough.
-Alarms turn magenta.
+A color-coded vitals row (CPU / RAM / GPU / hottest temp) stays pinned at the
+top; the detail panels (cpu, mem, gpu, thermals, disk, net, io) stack below in
+one scrollable column. Alarms turn magenta. Built for a quick check from a
+phone / SSH terminal.
 
-KEYS: [ ] brightness · q quit.
+KEYS: j/k or up/down scroll · space/b page · g/G top/bottom · [ ] brightness · q quit.
 ";
 
 /// Owns one concrete instance of each hardware panel. Ticked together; read for
-/// the vitals row and rendered into the grid.
+/// the vitals row and rendered into the scrollable column.
 struct Cockpit {
     cpu: CpuPanel,
     mem: MemPanel,
@@ -83,6 +88,15 @@ impl Cockpit {
             gpu: self.gpu.util(),
             temp: combine_temp(self.temp.hottest(), self.gpu.temp()),
         }
+    }
+
+    /// Per-panel row heights for the scrollable column, in render order. CPU is
+    /// sized to show every core; the rest are fixed generous heights (panels
+    /// clip to their row if a machine has more items than fit).
+    fn panel_heights(&self) -> Vec<u16> {
+        let cpu_h = (self.cpu.core_count() as u16).saturating_add(2 + 9);
+        // cpu, mem, gpu, temp, fans, disk, net, io
+        vec![cpu_h, 9, 11, 9, 5, 16, 12, 4]
     }
 }
 
@@ -152,76 +166,97 @@ fn render_vitals_row(f: &mut Frame, area: Rect, v: &Vitals, gpu_vram: Option<(u6
     );
 }
 
-/// Render the 3x2 detail grid: [cpu | mem] / [gpu | thermals] / [disk | net+io].
-/// The thermals and net+io cells stack two panels vertically.
-fn render_grid(f: &mut Frame, area: Rect, c: &Cockpit) {
-    let rows = Layout::default()
+/// Render the full detail column into an off-screen buffer of size
+/// `width x content_h`, one panel per row using `heights`. The caller blits the
+/// visible slice into the real frame, which gives smooth line-by-line scrolling
+/// regardless of how tall the column is.
+fn render_column_offscreen(c: &Cockpit, width: u16, heights: &[u16], content_h: u16) -> Buffer {
+    let backend = TestBackend::new(width.max(1), content_h.max(1));
+    let mut term = ratatui::Terminal::new(backend).expect("offscreen terminal");
+    term.draw(|tf| {
+        let area = tf.area();
+        let constraints: Vec<Constraint> =
+            heights.iter().map(|h| Constraint::Length(*h)).collect();
+        let slots = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(constraints)
+            .split(area);
+        c.cpu.render(tf, slots[0]);
+        c.mem.render(tf, slots[1]);
+        c.gpu.render(tf, slots[2]);
+        c.temp.render(tf, slots[3]);
+        c.fans.render(tf, slots[4]);
+        c.disk.render(tf, slots[5]);
+        c.net.render(tf, slots[6]);
+        c.io.render(tf, slots[7]);
+    })
+    .expect("offscreen draw");
+    term.backend().buffer().clone()
+}
+
+/// Copy the rows `[scroll, scroll + area.height)` of `src` into `area` of the
+/// frame. Out-of-range source rows are skipped (leaves blanks), so this never
+/// panics on a short column or oversized viewport.
+fn blit(f: &mut Frame, src: &Buffer, area: Rect, scroll: u16) {
+    let dst = f.buffer_mut();
+    for row in 0..area.height {
+        let sy = scroll.saturating_add(row);
+        for col in 0..area.width {
+            if let Some(cell) = src.cell((col, sy)) {
+                if let Some(d) = dst.cell_mut((area.x + col, area.y + row)) {
+                    *d = cell.clone();
+                }
+            }
+        }
+    }
+}
+
+fn draw(f: &mut Frame, c: &Cockpit, offbuf: &Buffer, scroll: u16, content_h: u16) {
+    let area = f.area();
+    let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Ratio(1, 3),
-            Constraint::Ratio(1, 3),
-            Constraint::Ratio(1, 3),
+            Constraint::Length(2), // pinned vitals row
+            Constraint::Length(1), // separator
+            Constraint::Min(0),    // scrollable column
+            Constraint::Length(1), // footer
         ])
         .split(area);
 
-    let split_cols = |r: Rect| {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-            .split(r)
-    };
-    let split_stack = |r: Rect| {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-            .split(r)
-    };
-
-    let r0 = split_cols(rows[0]);
-    c.cpu.render(f, r0[0]);
-    c.mem.render(f, r0[1]);
-
-    let r1 = split_cols(rows[1]);
-    c.gpu.render(f, r1[0]);
-    let thermals = split_stack(r1[1]);
-    c.temp.render(f, thermals[0]);
-    c.fans.render(f, thermals[1]);
-
-    let r2 = split_cols(rows[2]);
-    c.disk.render(f, r2[0]);
-    let netio = split_stack(r2[1]);
-    c.net.render(f, netio[0]);
-    c.io.render(f, netio[1]);
-}
-
-fn draw(f: &mut Frame, c: &Cockpit) {
-    let area = f.area();
     let v = c.read_vitals();
-    let gpu_vram = c.gpu.vram();
-    match choose_mode(area.width, area.height) {
-        Mode::Compact => {
-            render_vitals_row(f, area, &v, gpu_vram);
-        }
-        Mode::Full => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(2), // vitals row (2 lines)
-                    Constraint::Length(1), // separator
-                    Constraint::Min(3),    // detail grid
-                ])
-                .split(area);
-            render_vitals_row(f, chunks[0], &v, gpu_vram);
-            f.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    "─".repeat(area.width as usize),
-                    theme::dim(),
-                ))),
-                chunks[1],
-            );
-            render_grid(f, chunks[2], c);
-        }
-    }
+    render_vitals_row(f, chunks[0], &v, c.gpu.vram());
+
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "─".repeat(area.width as usize),
+            theme::dim(),
+        ))),
+        chunks[1],
+    );
+
+    blit(f, offbuf, chunks[2], scroll);
+
+    let view_h = chunks[2].height;
+    let max_scroll = content_h.saturating_sub(view_h);
+    let pct = if max_scroll == 0 {
+        100
+    } else {
+        (scroll as u32 * 100 / max_scroll as u32) as u16
+    };
+    let footer = Line::from(vec![
+        Span::styled(" j/k", theme::pane_header_focused()),
+        Span::styled(" scroll", theme::dim()),
+        Span::styled("  space/b", theme::pane_header_focused()),
+        Span::styled(" page", theme::dim()),
+        Span::styled("  g/G", theme::pane_header_focused()),
+        Span::styled(" top/bot", theme::dim()),
+        Span::styled("  [ ]", theme::pane_header_focused()),
+        Span::styled(" bright", theme::dim()),
+        Span::styled("  q", theme::pane_header_focused()),
+        Span::styled(" quit", theme::dim()),
+        Span::styled(format!("   {pct}%"), theme::status()),
+    ]);
+    f.render_widget(Paragraph::new(footer), chunks[3]);
 }
 
 fn main() -> Result<()> {
@@ -268,6 +303,8 @@ fn run<B: ratatui::backend::Backend>(
     cockpit: &mut Cockpit,
 ) -> Result<()> {
     let mut last = Instant::now();
+    let mut scroll: u16 = 0;
+    let mut goto_bottom = false;
     cockpit.tick_all(); // prime so the first frame has data
     loop {
         if last.elapsed() >= Duration::from_millis(1000) {
@@ -275,7 +312,23 @@ fn run<B: ratatui::backend::Backend>(
             last = Instant::now();
         }
 
-        terminal.draw(|f| draw(f, cockpit))?;
+        let size = terminal.size()?;
+        let width = size.width.max(1);
+        // Column viewport height = total minus row(2) + separator(1) + footer(1).
+        let view_h = size.height.saturating_sub(4);
+        let heights = cockpit.panel_heights();
+        let content_h: u16 = heights.iter().copied().sum::<u16>().max(1);
+        let offbuf = render_column_offscreen(cockpit, width, &heights, content_h);
+        let max_scroll = content_h.saturating_sub(view_h);
+        if goto_bottom {
+            scroll = max_scroll;
+            goto_bottom = false;
+        }
+        if scroll > max_scroll {
+            scroll = max_scroll;
+        }
+
+        terminal.draw(|f| draw(f, cockpit, &offbuf, scroll, content_h))?;
 
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
@@ -285,8 +338,27 @@ fn run<B: ratatui::backend::Backend>(
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                     return Ok(());
                 }
+                let page = view_h.saturating_sub(1).max(1);
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        scroll = scroll.saturating_add(2).min(max_scroll);
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        scroll = scroll.saturating_sub(2);
+                    }
+                    KeyCode::Char(' ') | KeyCode::PageDown => {
+                        scroll = scroll.saturating_add(page).min(max_scroll);
+                    }
+                    KeyCode::Char('b') | KeyCode::PageUp => {
+                        scroll = scroll.saturating_sub(page);
+                    }
+                    KeyCode::Char('g') | KeyCode::Home => {
+                        scroll = 0;
+                    }
+                    KeyCode::Char('G') | KeyCode::End => {
+                        goto_bottom = true;
+                    }
                     KeyCode::Char('[') => {
                         brightness::dim();
                     }
