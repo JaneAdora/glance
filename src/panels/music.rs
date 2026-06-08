@@ -166,6 +166,8 @@ fn key_playerctl_args(code: KeyCode) -> Option<&'static [&'static str]> {
         KeyCode::Char(' ') => Some(&["play-pause"]),
         KeyCode::Char('>') => Some(&["next"]),
         KeyCode::Char('<') => Some(&["previous"]),
+        KeyCode::Left => Some(&["previous"]),
+        KeyCode::Right => Some(&["next"]),
         KeyCode::Up => Some(&["volume", "0.05+"]),
         KeyCode::Down => Some(&["volume", "0.05-"]),
         KeyCode::Char('.') => Some(&["position", "5+"]),
@@ -355,6 +357,8 @@ impl Panel for MusicPanel {
                 KeyCode::Char(' ') => "play/pause",
                 KeyCode::Char('>') => "next track",
                 KeyCode::Char('<') => "previous track",
+                KeyCode::Left => "previous track",
+                KeyCode::Right => "next track",
                 KeyCode::Up => "volume +5%",
                 KeyCode::Down => "volume -5%",
                 KeyCode::Char('.') => "seek +5s",
@@ -441,6 +445,8 @@ mod tests {
         assert_eq!(key_playerctl_args(KeyCode::Char(' ')), Some(&["play-pause"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('>')), Some(&["next"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('<')), Some(&["previous"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Left), Some(&["previous"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Right), Some(&["next"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Up), Some(&["volume", "0.05+"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Down), Some(&["volume", "0.05-"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('.')), Some(&["position", "5+"][..]));
