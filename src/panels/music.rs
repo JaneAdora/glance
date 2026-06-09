@@ -26,6 +26,8 @@ pub struct MusicPanel {
     loop_status: String,
     toast: Option<(String, Instant)>,
     started: Instant, // for marquee animation
+    auto_target: Option<String>,   // active player picked when none is selected
+    last_refresh: Option<Instant>, // throttle for player discovery + selection
 }
 
 impl MusicPanel {
@@ -43,11 +45,15 @@ impl MusicPanel {
             loop_status: "None".to_string(),
             toast: None,
             started: Instant::now(),
+            auto_target: None,
+            last_refresh: None,
         }
     }
 
+    /// The player to act on: the user's explicit selection, else the auto-picked
+    /// active player (a real Playing/Paused player, not an idle background tab).
     fn target(&self) -> Option<String> {
-        self.selected.clone()
+        self.selected.clone().or_else(|| self.auto_target.clone())
     }
 
     fn refresh_players(&mut self) {
@@ -97,6 +103,71 @@ fn playerctl(target: &Option<String>, args: &[&str]) -> Option<String> {
         return None;
     }
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// A full now-playing snapshot fetched in ONE playerctl call.
+#[derive(Debug, Default, PartialEq)]
+struct Meta {
+    status: String,
+    artist: String,
+    title: String,
+    album: String,
+    length: f64,   // seconds
+    position: f64, // seconds
+    shuffle: bool,
+}
+
+/// Parse the US-separated output of the batched `metadata --format` call.
+/// `{{mpris:length}}` and `{{position}}` are microseconds; `{{shuffle}}` is
+/// "true"/"false". Returns None when the player is gone (no/short output).
+fn parse_meta(out: &str) -> Option<Meta> {
+    let f: Vec<&str> = out.split('\u{1f}').collect();
+    if f.len() < 7 {
+        return None;
+    }
+    let us_to_s = |s: &str| s.parse::<f64>().ok().map(|us| us / 1_000_000.0).unwrap_or(0.0);
+    Some(Meta {
+        status: f[0].to_string(),
+        artist: f[1].to_string(),
+        title: f[2].to_string(),
+        album: f[3].to_string(),
+        length: us_to_s(f[4]),
+        position: us_to_s(f[5]),
+        shuffle: f[6] == "true",
+    })
+}
+
+/// One batched playerctl call for the whole now-playing snapshot.
+fn playerctl_metadata(target: &Option<String>) -> Option<Meta> {
+    const FMT: &str = "{{status}}\u{1f}{{xesam:artist}}\u{1f}{{xesam:title}}\u{1f}{{xesam:album}}\u{1f}{{mpris:length}}\u{1f}{{position}}\u{1f}{{shuffle}}";
+    parse_meta(&playerctl(target, &["metadata", "--format", FMT])?)
+}
+
+/// Choose which player to follow from (name, status) pairs: prefer a Playing
+/// player, then a Paused one, else the first. Avoids latching onto an idle
+/// background player (e.g. a stopped browser tab) while a real player is active.
+fn choose_target(players: &[(String, String)]) -> Option<String> {
+    players
+        .iter()
+        .find(|(_, s)| s == "Playing")
+        .or_else(|| players.iter().find(|(_, s)| s == "Paused"))
+        .or_else(|| players.first())
+        .map(|(name, _)| name.clone())
+}
+
+/// Pick the active player by querying each player's status once.
+fn pick_active_player(players: &[String]) -> Option<String> {
+    if players.is_empty() {
+        return None;
+    }
+    let with_status: Vec<(String, String)> = players
+        .iter()
+        .map(|name| {
+            let st = playerctl(&Some(name.clone()), &["status"]).unwrap_or_default();
+            (name.clone(), st)
+        })
+        .collect();
+    choose_target(&with_status)
 }
 
 fn marquee(text: &str, width: usize, t: f64) -> String {
@@ -183,19 +254,42 @@ impl Panel for MusicPanel {
     }
 
     fn refresh_ms(&self) -> u64 {
-        500
+        1000
     }
 
     fn tick(&mut self) {
-        self.refresh_players();
-
         if self.toast.as_ref().is_some_and(|(_, shown)| shown.elapsed() >= TOAST_TTL) {
             self.toast = None;
         }
 
-        let target = self.target();
-        match playerctl(&target, &["status"]) {
-            Some(s) => self.status = s,
+        // Player discovery + active-player selection + loop status rarely change
+        // but cost several playerctl spawns (= D-Bus connections). Throttle them
+        // to every few seconds. The old code ran ~9 playerctl processes PER TICK
+        // at 2 Hz, flooding the session bus until it wedged after a few hours;
+        // this is the bulk of that churn.
+        let due = self
+            .last_refresh
+            .map_or(true, |t| t.elapsed() >= Duration::from_secs(5));
+        if due {
+            self.refresh_players();
+            self.auto_target = pick_active_player(&self.players);
+            if let Some(l) = playerctl(&self.target(), &["loop"]) {
+                self.loop_status = l;
+            }
+            self.last_refresh = Some(Instant::now());
+        }
+
+        // One batched call gets status + all metadata + position + shuffle.
+        match playerctl_metadata(&self.target()) {
+            Some(m) => {
+                self.status = m.status;
+                self.artist = m.artist;
+                self.title = m.title;
+                self.album = m.album;
+                self.length = m.length;
+                self.position = m.position;
+                self.shuffle = m.shuffle;
+            }
             None => {
                 self.status = "(none)".to_string();
                 self.artist.clear();
@@ -205,19 +299,8 @@ impl Panel for MusicPanel {
                 self.length = 0.0;
                 self.shuffle = false;
                 self.loop_status = "None".to_string();
-                return;
             }
         }
-        self.artist = playerctl(&target, &["metadata", "artist"]).unwrap_or_default();
-        self.title = playerctl(&target, &["metadata", "title"]).unwrap_or_default();
-        self.album = playerctl(&target, &["metadata", "album"]).unwrap_or_default();
-        self.position = playerctl(&target, &["position"]).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-        self.length = playerctl(&target, &["metadata", "mpris:length"])
-            .and_then(|s| s.parse::<f64>().ok())
-            .map(|us| us / 1_000_000.0)
-            .unwrap_or(0.0);
-        self.shuffle = playerctl(&target, &["shuffle"]).is_some_and(|s| s == "On");
-        self.loop_status = playerctl(&target, &["loop"]).unwrap_or_else(|| "None".to_string());
     }
 
     fn render(&self, f: &mut Frame, area: Rect) {
@@ -452,5 +535,44 @@ mod tests {
         assert_eq!(key_playerctl_args(KeyCode::Char('.')), Some(&["position", "5+"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char(',')), Some(&["position", "5-"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('s')), Some(&["shuffle", "toggle"][..]));
+    }
+
+    #[test]
+    fn parse_meta_splits_fields_and_converts_microseconds() {
+        let out = "Playing\u{1f}Zero 7\u{1f}This World\u{1f}Simple Things\u{1f}335960000\u{1f}69226016\u{1f}false";
+        let m = parse_meta(out).unwrap();
+        assert_eq!(m.status, "Playing");
+        assert_eq!(m.artist, "Zero 7");
+        assert_eq!(m.title, "This World");
+        assert_eq!(m.album, "Simple Things");
+        assert!((m.length - 335.96).abs() < 0.01, "length {}", m.length);
+        assert!((m.position - 69.226).abs() < 0.01, "position {}", m.position);
+        assert!(!m.shuffle);
+    }
+
+    #[test]
+    fn parse_meta_none_on_short_output() {
+        assert!(parse_meta("").is_none());
+        assert!(parse_meta("Playing\u{1f}only\u{1f}three").is_none());
+    }
+
+    #[test]
+    fn choose_target_prefers_playing_then_paused_then_first() {
+        let mixed = vec![
+            ("chromium".to_string(), "Stopped".to_string()),
+            ("spotify".to_string(), "Playing".to_string()),
+        ];
+        assert_eq!(choose_target(&mixed), Some("spotify".to_string()));
+        let paused = vec![
+            ("a".to_string(), "Stopped".to_string()),
+            ("b".to_string(), "Paused".to_string()),
+        ];
+        assert_eq!(choose_target(&paused), Some("b".to_string()));
+        let stopped = vec![
+            ("a".to_string(), "Stopped".to_string()),
+            ("b".to_string(), "Stopped".to_string()),
+        ];
+        assert_eq!(choose_target(&stopped), Some("a".to_string()));
+        assert_eq!(choose_target(&[]), None);
     }
 }
