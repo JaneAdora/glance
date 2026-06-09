@@ -25,7 +25,7 @@ USAGE:
 Controls any MPRIS player via playerctl (Spotify, Chromium, a phone over
 kdeconnect, ...). Running standalone frees the arrow keys for track nav.
 
-KEYS: ←/→ prev/next · space play/pause · ↑/↓ volume · ,/. seek · s shuffle ·
+KEYS: ←/→ prev/next · space play/pause · ↑/↓ or +/- volume · ,/. seek · s shuffle ·
       L loop · d device · [ ] brightness · q quit.
 ";
 

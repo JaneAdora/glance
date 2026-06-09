@@ -239,8 +239,8 @@ fn key_playerctl_args(code: KeyCode) -> Option<&'static [&'static str]> {
         KeyCode::Char('<') => Some(&["previous"]),
         KeyCode::Left => Some(&["previous"]),
         KeyCode::Right => Some(&["next"]),
-        KeyCode::Up => Some(&["volume", "0.05+"]),
-        KeyCode::Down => Some(&["volume", "0.05-"]),
+        KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => Some(&["volume", "0.05+"]),
+        KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('_') => Some(&["volume", "0.05-"]),
         KeyCode::Char('.') => Some(&["position", "5+"]),
         KeyCode::Char(',') => Some(&["position", "5-"]),
         KeyCode::Char('s') => Some(&["shuffle", "toggle"]),
@@ -346,7 +346,7 @@ impl Panel for MusicPanel {
             .as_ref()
             .filter(|(_, shown)| shown.elapsed() < TOAST_TTL)
             .map(|(message, _)| message.as_str())
-            .unwrap_or("space play  <> track  up/down vol  ., seek  s shuffle  L loop  d device");
+            .unwrap_or("space play  <> track  +/- vol  ., seek  s shuffle  L loop  d device");
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(hint, theme::dim())))
                 .alignment(Alignment::Center),
@@ -442,8 +442,8 @@ impl Panel for MusicPanel {
                 KeyCode::Char('<') => "previous track",
                 KeyCode::Left => "previous track",
                 KeyCode::Right => "next track",
-                KeyCode::Up => "volume +5%",
-                KeyCode::Down => "volume -5%",
+                KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => "volume +5%",
+                KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('_') => "volume -5%",
                 KeyCode::Char('.') => "seek +5s",
                 KeyCode::Char(',') => "seek -5s",
                 KeyCode::Char('s') => "shuffle toggle",
@@ -532,6 +532,10 @@ mod tests {
         assert_eq!(key_playerctl_args(KeyCode::Right), Some(&["next"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Up), Some(&["volume", "0.05+"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Down), Some(&["volume", "0.05-"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Char('+')), Some(&["volume", "0.05+"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Char('=')), Some(&["volume", "0.05+"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Char('-')), Some(&["volume", "0.05-"][..]));
+        assert_eq!(key_playerctl_args(KeyCode::Char('_')), Some(&["volume", "0.05-"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('.')), Some(&["position", "5+"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char(',')), Some(&["position", "5-"][..]));
         assert_eq!(key_playerctl_args(KeyCode::Char('s')), Some(&["shuffle", "toggle"][..]));
