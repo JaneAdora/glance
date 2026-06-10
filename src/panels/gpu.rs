@@ -135,7 +135,7 @@ fn parse_gpu_procs(text: &str) -> Vec<(u32, u64)> {
 /// the truncated `...rack-uuid=...` shown in nvidia-smi).
 fn proc_comm(pid: u32) -> Option<String> {
     let s = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
-    let s = s.trim().to_string();
+    let s = crate::widgets::sanitize_label(s.trim());
     (!s.is_empty()).then_some(s)
 }
 

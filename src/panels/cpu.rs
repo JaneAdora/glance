@@ -169,7 +169,7 @@ impl Panel for CpuPanel {
             .sys
             .processes()
             .values()
-            .map(|p| (p.cpu_usage(), p.name().to_string_lossy().into_owned(), p.pid().as_u32()))
+            .map(|p| (p.cpu_usage(), crate::widgets::sanitize_label(&p.name().to_string_lossy()), p.pid().as_u32()))
             .collect();
         procs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         procs.truncate(5);

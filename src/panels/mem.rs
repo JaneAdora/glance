@@ -162,7 +162,7 @@ impl Panel for MemPanel {
                     .sys
                     .processes()
                     .values()
-                    .map(|p| (p.memory(), p.name().to_string_lossy().into_owned(), p.pid().as_u32()))
+                    .map(|p| (p.memory(), crate::widgets::sanitize_label(&p.name().to_string_lossy()), p.pid().as_u32()))
                     .collect();
                 procs.sort_by(|a, b| b.0.cmp(&a.0));
                 procs.truncate(5);
