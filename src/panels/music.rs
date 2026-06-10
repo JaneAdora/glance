@@ -126,11 +126,14 @@ fn parse_meta(out: &str) -> Option<Meta> {
         return None;
     }
     let us_to_s = |s: &str| s.parse::<f64>().ok().map(|us| us / 1_000_000.0).unwrap_or(0.0);
+    // MPRIS metadata is attacker-controllable (a crafted media file's tags) and
+    // is rendered to the TTY; strip control bytes to block escape injection.
+    use crate::widgets::sanitize_label;
     Some(Meta {
-        status: f[0].to_string(),
-        artist: f[1].to_string(),
-        title: f[2].to_string(),
-        album: f[3].to_string(),
+        status: sanitize_label(f[0]),
+        artist: sanitize_label(f[1]),
+        title: sanitize_label(f[2]),
+        album: sanitize_label(f[3]),
         length: us_to_s(f[4]),
         position: us_to_s(f[5]),
         shuffle: f[6] == "true",
@@ -274,7 +277,7 @@ impl Panel for MusicPanel {
             self.refresh_players();
             self.auto_target = pick_active_player(&self.players);
             if let Some(l) = playerctl(&self.target(), &["loop"]) {
-                self.loop_status = l;
+                self.loop_status = crate::widgets::sanitize_label(&l);
             }
             self.last_refresh = Some(Instant::now());
         }
@@ -552,6 +555,16 @@ mod tests {
         assert!((m.length - 335.96).abs() < 0.01, "length {}", m.length);
         assert!((m.position - 69.226).abs() < 0.01, "position {}", m.position);
         assert!(!m.shuffle);
+    }
+
+    #[test]
+    fn parse_meta_sanitizes_control_chars_in_metadata() {
+        let out = "Playing\u{1f}Ar\u{1b}[2Jtist\u{1f}Ti\u{7f}tle\u{1f}Alb\u{9b}um\u{1f}0\u{1f}0\u{1f}false";
+        let m = parse_meta(out).unwrap();
+        assert_eq!(m.artist, "Ar.[2Jtist", "ESC neutralized");
+        assert_eq!(m.title, "Ti.tle", "DEL neutralized");
+        assert_eq!(m.album, "Alb.um", "C1 control neutralized");
+        assert_eq!(m.status, "Playing", "clean status unchanged");
     }
 
     #[test]
