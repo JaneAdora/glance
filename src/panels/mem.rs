@@ -2,10 +2,10 @@ use crate::panels::Panel;
 use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Gauge, Sparkline};
+use ratatui::widgets::{Block, Borders, Cell, Gauge, Row, Sparkline, Table};
 use ratatui::Frame;
 use std::collections::VecDeque;
-use sysinfo::{MemoryRefreshKind, RefreshKind, System};
+use sysinfo::{MemoryRefreshKind, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 
 const HIST: usize = 60;
 
@@ -17,7 +17,9 @@ pub struct MemPanel {
 impl MemPanel {
     pub fn new() -> Self {
         let sys = System::new_with_specifics(
-            RefreshKind::new().with_memory(MemoryRefreshKind::everything()),
+            RefreshKind::new()
+                .with_memory(MemoryRefreshKind::everything())
+                .with_processes(ProcessRefreshKind::everything()),
         );
         Self {
             sys,
@@ -68,6 +70,7 @@ impl Panel for MemPanel {
 
     fn tick(&mut self) {
         self.sys.refresh_memory();
+        self.sys.refresh_processes(ProcessesToUpdate::All, true);
         if self.history.len() == HIST {
             self.history.pop_front();
         }
@@ -75,13 +78,20 @@ impl Panel for MemPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect) {
+        // Show the per-process RAM table only when the pane is tall enough
+        // (gauges 6 + min history 3 + table 7). Collapses on short/phone panes.
+        let show_procs = area.height >= 16;
+        let mut constraints = vec![
+            Constraint::Length(3), // RAM gauge
+            Constraint::Length(3), // Swap gauge
+            Constraint::Min(3),    // RAM history
+        ];
+        if show_procs {
+            constraints.push(Constraint::Length(7)); // Top processes (RAM)
+        }
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Min(3),
-            ])
+            .constraints(constraints)
             .split(area);
 
         let used = self.sys.used_memory();
@@ -145,6 +155,35 @@ impl Panel for MemPanel {
             .max(100)
             .style(theme::historical());
         f.render_widget(spark, chunks[2]);
+
+        if show_procs {
+            if let Some(proc_area) = chunks.get(3).copied() {
+                let mut procs: Vec<_> = self
+                    .sys
+                    .processes()
+                    .values()
+                    .map(|p| (p.memory(), p.name().to_string_lossy().into_owned(), p.pid().as_u32()))
+                    .collect();
+                procs.sort_by(|a, b| b.0.cmp(&a.0));
+                procs.truncate(5);
+                let table = Table::new(
+                    procs.into_iter().map(|(rss, name, pid)| {
+                        Row::new(vec![
+                            Cell::from(format!("{:>6}", human(rss))).style(theme::now()),
+                            Cell::from(format!("{pid:>6}")).style(theme::dim()),
+                            Cell::from(name),
+                        ])
+                    }),
+                    [Constraint::Length(8), Constraint::Length(7), Constraint::Min(8)],
+                )
+                .header(Row::new(vec!["RSS", "PID", "Command"]).style(theme::pane_header()))
+                .block(Block::default().borders(Borders::NONE).title(Line::from(Span::styled(
+                    " Top processes ",
+                    theme::pane_header(),
+                ))));
+                f.render_widget(table, proc_area);
+            }
+        }
     }
 }
 

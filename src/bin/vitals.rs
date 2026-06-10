@@ -95,8 +95,9 @@ impl Cockpit {
     /// clip to their row if a machine has more items than fit).
     fn panel_heights(&self) -> Vec<u16> {
         let cpu_h = (self.cpu.core_count() as u16).saturating_add(2 + 9);
-        // cpu, mem, gpu, temp, fans, disk, net, io
-        vec![cpu_h, 9, 11, 9, 5, 16, 12, 4]
+        // cpu, mem, gpu, temp, fans, disk, net, io. mem=17 / gpu=18 leave
+        // room for their Top-processes tables (RAM / VRAM) in the column.
+        vec![cpu_h, 17, 18, 9, 5, 16, 12, 4]
     }
 }
 
