@@ -146,16 +146,39 @@ fn playerctl_metadata(target: &Option<String>) -> Option<Meta> {
     parse_meta(&playerctl(target, &["metadata", "--format", FMT])?)
 }
 
-/// Choose which player to follow from (name, status) pairs: prefer a Playing
-/// player, then a Paused one, else the first. Avoids latching onto an idle
-/// background player (e.g. a stopped browser tab) while a real player is active.
+/// A kdeconnect phone player. These are bridged from a paired phone, often
+/// linger in a stale "Playing" state, and sort ahead of local apps in
+/// `playerctl -l`. We always prefer the local desktop player we are actually
+/// driving (Spotify, a browser, vlc) over a phone, so volume/transport keys
+/// reach it. The `d` key still cycles to a phone on purpose.
+fn is_remote_player(name: &str) -> bool {
+    name.starts_with("kdeconnect.")
+}
+
+/// Higher is better. Tiers: local-Playing > local-Paused > remote-Playing >
+/// remote-Paused > local-other > remote-other. Within a tier, list order wins.
+fn target_rank(name: &str, status: &str) -> u8 {
+    match (is_remote_player(name), status) {
+        (false, "Playing") => 5,
+        (false, "Paused") => 4,
+        (true, "Playing") => 3,
+        (true, "Paused") => 2,
+        (false, _) => 1,
+        (true, _) => 0,
+    }
+}
+
+/// Choose which player to follow from (name, status) pairs. Prefers the active
+/// local player over a kdeconnect phone, then Playing over Paused, so a phone
+/// idling in the background never steals the target from the local app. Avoids
+/// latching onto an idle player while a real one is active. Ties break toward
+/// the first listed player.
 fn choose_target(players: &[(String, String)]) -> Option<String> {
     players
         .iter()
-        .find(|(_, s)| s == "Playing")
-        .or_else(|| players.iter().find(|(_, s)| s == "Paused"))
-        .or_else(|| players.first())
-        .map(|(name, _)| name.clone())
+        .enumerate()
+        .max_by_key(|(i, (name, status))| (target_rank(name, status), std::cmp::Reverse(*i)))
+        .map(|(_, (name, _))| name.clone())
 }
 
 /// Pick the active player by querying each player's status once.
@@ -591,5 +614,50 @@ mod tests {
         ];
         assert_eq!(choose_target(&stopped), Some("a".to_string()));
         assert_eq!(choose_target(&[]), None);
+    }
+
+    #[test]
+    fn choose_target_prefers_local_player_over_kdeconnect_phone() {
+        // Real-world failure: several kdeconnect phone players report a stale
+        // "Playing" and sort before the local Spotify client. The desktop app
+        // we are actually driving must win, so +/- volume reaches Spotify, not
+        // a phone.
+        let with_phones = vec![
+            ("kdeconnect.mpris_aaa".to_string(), "Playing".to_string()),
+            ("kdeconnect.mpris_bbb".to_string(), "Playing".to_string()),
+            ("spotify".to_string(), "Playing".to_string()),
+        ];
+        assert_eq!(choose_target(&with_phones), Some("spotify".to_string()));
+    }
+
+    #[test]
+    fn choose_target_prefers_playing_local_over_paused_local() {
+        // Among local players the active one still wins regardless of order.
+        let players = vec![
+            ("chromium".to_string(), "Paused".to_string()),
+            ("spotify".to_string(), "Playing".to_string()),
+        ];
+        assert_eq!(choose_target(&players), Some("spotify".to_string()));
+    }
+
+    #[test]
+    fn choose_target_local_paused_beats_kdeconnect_playing() {
+        // A paused local app is still the thing the user is driving; a phone
+        // playing in the background should not steal the target.
+        let players = vec![
+            ("kdeconnect.mpris_aaa".to_string(), "Playing".to_string()),
+            ("spotify".to_string(), "Paused".to_string()),
+        ];
+        assert_eq!(choose_target(&players), Some("spotify".to_string()));
+    }
+
+    #[test]
+    fn choose_target_falls_back_to_kdeconnect_when_only_option() {
+        // With no local player, a phone is still better than nothing.
+        let only_phones = vec![
+            ("kdeconnect.mpris_aaa".to_string(), "Paused".to_string()),
+            ("kdeconnect.mpris_bbb".to_string(), "Playing".to_string()),
+        ];
+        assert_eq!(choose_target(&only_phones), Some("kdeconnect.mpris_bbb".to_string()));
     }
 }
