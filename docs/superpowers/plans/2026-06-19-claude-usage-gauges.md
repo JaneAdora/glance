@@ -113,6 +113,14 @@ mod tests {
     }
 
     #[test]
+    fn creds_debug_redacts_token() {
+        let c = parse_credentials(CREDS_OK, 1000).unwrap();
+        let dbg = format!("{c:?}");
+        assert!(!dbg.contains("tok-abc"), "Debug must not leak the token");
+        assert!(dbg.contains("[redacted]"));
+    }
+
+    #[test]
     fn parse_credentials_malformed_json() {
         assert!(matches!(parse_credentials("{not json", 0), Err(CredsError::Malformed(_))));
     }
@@ -135,12 +143,25 @@ Prepend to `src/usage.rs` (above the test module):
 ```rust
 use serde::Deserialize;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Creds {
     pub access_token: String,
     pub expires_at_ms: i64,
     pub subscription: String,
     pub tier: String,
+}
+
+// Manual Debug that redacts the access token: the OAuth token must never reach
+// a log or terminal, and a derived Debug would print it via any `{:?}`.
+impl std::fmt::Debug for Creds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Creds")
+            .field("access_token", &"[redacted]")
+            .field("expires_at_ms", &self.expires_at_ms)
+            .field("subscription", &self.subscription)
+            .field("tier", &self.tier)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -243,44 +264,57 @@ git commit -m "feat(usage): read and validate the local Claude OAuth credentials
 
 Add these tests inside the existing `#[cfg(test)] mod tests` in `src/usage.rs`. Replace `SAMPLE_USAGE` with the real body captured in Task 1 if its shape differs (keep at least the five_hour/seven_day/opus/sonnet/overage windows so the assertions hold):
 ```rust
-    // Captured from GET /api/oauth/usage (Task 1). Lightly trimmed.
+    // Captured from GET /api/oauth/usage (Task 1). Real shape: ISO resets with
+    // fractional seconds + offset; windows may be null; extra_usage carries no
+    // `utilization` when disabled; dollar/`limits`/`spend` fields are ignored.
     const SAMPLE_USAGE: &str = r#"{
-        "five_hour":      {"utilization": 41, "resets_at": "2026-06-20T18:00:00Z"},
-        "seven_day":      {"utilization": 33, "resets_at": "2026-06-24T06:00:00Z"},
-        "seven_day_opus": {"utilization": 18, "resets_at": "2026-06-24T06:00:00Z"},
-        "seven_day_sonnet": {"utilization": 7, "resets_at": "2026-06-24T06:00:00Z"},
-        "overage":        {"utilization": 0, "resets_at": "2026-07-01T00:00:00Z"}
+        "five_hour":        {"utilization": 41, "resets_at": "2026-06-20T18:00:00.513591+00:00", "limit_dollars": null},
+        "seven_day":        {"utilization": 33, "resets_at": "2026-06-24T06:00:00.513611+00:00", "limit_dollars": null},
+        "seven_day_opus":   null,
+        "seven_day_sonnet": {"utilization": 7, "resets_at": "2026-06-24T06:00:00.513618+00:00", "limit_dollars": null},
+        "extra_usage":      {"is_enabled": false, "utilization": null},
+        "limits": [],
+        "spend": {}
     }"#;
 
     #[test]
-    fn parse_usage_reads_all_windows_in_order() {
+    fn parse_usage_reads_present_windows_in_order() {
         let snap = parse_usage(SAMPLE_USAGE.as_bytes()).unwrap();
         let kinds: Vec<WindowKind> = snap.windows.iter().map(|w| w.kind).collect();
+        // opus is null and extra_usage has no utilization, so both are dropped.
         assert_eq!(
             kinds,
             vec![
                 WindowKind::FiveHour,
                 WindowKind::SevenDay,
-                WindowKind::SevenDayOpus,
                 WindowKind::SevenDaySonnet,
-                WindowKind::Overage,
             ]
         );
         assert_eq!(snap.windows[0].utilization, 41.0);
-        // 2026-06-20T18:00:00Z == 1781978400 epoch seconds.
+        // 2026-06-20T18:00:00Z == 1781978400 (fractional seconds + offset ignored).
         assert_eq!(snap.windows[0].resets_at, Some(1781978400));
     }
 
     #[test]
-    fn parse_usage_omits_absent_windows() {
-        let json = r#"{"five_hour":{"utilization":10,"resets_at":"2026-06-20T18:00:00Z"},"seven_day":{"utilization":20,"resets_at":"2026-06-24T06:00:00Z"}}"#;
+    fn parse_usage_maps_opus_when_present() {
+        let json = r#"{"seven_day_opus":{"utilization":18,"resets_at":"2026-06-24T06:00:00Z"}}"#;
         let snap = parse_usage(json.as_bytes()).unwrap();
-        assert_eq!(snap.windows.len(), 2);
+        assert_eq!(snap.windows.len(), 1);
+        assert_eq!(snap.windows[0].kind, WindowKind::SevenDayOpus);
+        assert_eq!(snap.windows[0].utilization, 18.0);
     }
 
     #[test]
-    fn parse_usage_skips_unknown_window_kind() {
-        let json = r#"{"five_hour":{"utilization":10,"resets_at":"2026-06-20T18:00:00Z"},"some_future_window":{"utilization":99}}"#;
+    fn parse_usage_maps_overage_from_extra_usage() {
+        let json = r#"{"extra_usage":{"utilization":12,"resets_at":1781978400}}"#;
+        let snap = parse_usage(json.as_bytes()).unwrap();
+        assert_eq!(snap.windows.len(), 1);
+        assert_eq!(snap.windows[0].kind, WindowKind::Overage);
+    }
+
+    #[test]
+    fn parse_usage_skips_null_and_unknown_windows() {
+        let json = r#"{"five_hour":{"utilization":10,"resets_at":"2026-06-20T18:00:00Z"},"seven_day_opus":null,"some_future_window":{"utilization":99}}"#;
         let snap = parse_usage(json.as_bytes()).unwrap();
         assert_eq!(snap.windows.len(), 1);
         assert_eq!(snap.windows[0].kind, WindowKind::FiveHour);
@@ -288,9 +322,9 @@ Add these tests inside the existing `#[cfg(test)] mod tests` in `src/usage.rs`. 
 
     #[test]
     fn parse_usage_accepts_epoch_number_resets() {
-        let json = r#"{"five_hour":{"utilization":5,"resets_at":1782021600}}"#;
+        let json = r#"{"five_hour":{"utilization":5,"resets_at":1781978400}}"#;
         let snap = parse_usage(json.as_bytes()).unwrap();
-        assert_eq!(snap.windows[0].resets_at, Some(1782021600));
+        assert_eq!(snap.windows[0].resets_at, Some(1781978400));
     }
 
     #[test]
@@ -311,6 +345,11 @@ Add these tests inside the existing `#[cfg(test)] mod tests` in `src/usage.rs`. 
     fn rfc3339_to_epoch() {
         assert_eq!(parse_rfc3339_utc("1970-01-01T00:00:00Z"), Some(0));
         assert_eq!(parse_rfc3339_utc("2000-01-01T00:00:00Z"), Some(946684800));
+        // Real endpoint format: fractional seconds + explicit +00:00 offset.
+        assert_eq!(
+            parse_rfc3339_utc("2026-06-20T18:00:00.513591+00:00"),
+            Some(1781978400)
+        );
         assert_eq!(parse_rfc3339_utc("nope"), None);
     }
 ```
@@ -621,21 +660,11 @@ const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 /// Fetch the live usage report. Network is isolated here (curl subprocess,
 /// same approach as the weather panel). `--fail` makes curl exit non-zero on
 /// any HTTP 4xx/5xx (expired token, rate limit), surfacing as an Err.
+/// Task 1 confirmed the bearer token alone returns 200; no extra headers.
 pub fn fetch(token: &str) -> Result<UsageSnapshot, String> {
     let auth = format!("Authorization: Bearer {token}");
     let out = Command::new("curl")
-        .args([
-            "-sf",
-            "--max-time",
-            "10",
-            "-H",
-            &auth,
-            // Header set confirmed in Task 1. Adjust to match if Task 1 found
-            // a different working set.
-            "-H",
-            "anthropic-beta: oauth-2025-04-20",
-            USAGE_URL,
-        ])
+        .args(["-sf", "--max-time", "10", "-H", &auth, USAGE_URL])
         .output()
         .map_err(|e| format!("curl: {e}"))?;
     if !out.status.success() {
@@ -886,7 +915,7 @@ impl Panel for UsagePanel {
                 .map(|r| format!("   resets {}", fmt_reset(r - now_s)))
                 .unwrap_or_default();
             lines.push(Line::from(vec![
-                Span::styled(format!("{label:<8}"), theme::dim()),
+                Span::styled(format!("{label:<9}"), theme::dim()),
                 Span::styled(bar, bar_style),
                 Span::styled(format!(" {:>3.0}%", w.utilization), pct_style),
                 Span::styled(resets, theme::dim()),
