@@ -6,12 +6,25 @@ use ratatui::style::Color;
 use serde::Deserialize;
 use std::process::Command;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Creds {
     pub access_token: String,
     pub expires_at_ms: i64,
     pub subscription: String,
     pub tier: String,
+}
+
+// Manual Debug that redacts the access token: the OAuth token must never reach
+// a log or terminal, and a derived Debug would print it via any `{:?}`.
+impl std::fmt::Debug for Creds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Creds")
+            .field("access_token", &"[redacted]")
+            .field("expires_at_ms", &self.expires_at_ms)
+            .field("subscription", &self.subscription)
+            .field("tier", &self.tier)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -294,6 +307,14 @@ mod tests {
         assert_eq!(c.expires_at_ms, 2000);
         assert_eq!(c.subscription, "max");
         assert_eq!(c.tier, "default_claude_max_20x");
+    }
+
+    #[test]
+    fn creds_debug_redacts_token() {
+        let c = parse_credentials(CREDS_OK, 1000).unwrap();
+        let dbg = format!("{c:?}");
+        assert!(!dbg.contains("tok-abc"), "Debug must not leak the token");
+        assert!(dbg.contains("[redacted]"));
     }
 
     #[test]
