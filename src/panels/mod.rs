@@ -33,6 +33,7 @@ pub mod solar;
 pub mod starfield;
 pub mod standup;
 pub mod tasks;
+pub mod usage;
 pub mod weather;
 pub mod world_ping;
 
@@ -65,7 +66,7 @@ pub const DEFAULT_ORDER: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "cal", "crew", "tasks", "standup",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "launchers", "cal", "crew", "tasks", "standup", "usage",
 ];
 
 /// All buildable panel names (superset of DEFAULT_ORDER; includes `battery`).
@@ -73,7 +74,7 @@ pub const ALL_PANELS: &[&str] = &[
     "cpu", "mem", "net", "disk", "loadavg", "entropy", "fans", "io", "conn", "gpu",
     "ping", "world-ping", "traceroute", "commits", "health", "prs", "issues", "temp", "tsmap",
     "clock", "weather", "alerts", "hurricane", "solar",
-    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "cal", "crew", "tasks", "standup",
+    "timer", "music", "pet", "moon", "mascot", "starfield", "mandala", "battery", "launchers", "cal", "crew", "tasks", "standup", "usage",
 ];
 
 /// Construct a panel by name. Returns None for unknown names.
@@ -116,6 +117,7 @@ pub fn build_panel(name: &str) -> Option<Box<dyn Panel>> {
         "crew" => Box::new(crew::CrewPanel::new()),
         "tasks" => Box::new(tasks::TasksPanel::new()),
         "standup" => Box::new(standup::StandupPanel::new()),
+        "usage" => Box::new(usage::UsagePanel::new()),
         _ => return None,
     })
 }

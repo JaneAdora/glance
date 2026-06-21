@@ -14,5 +14,6 @@ pub mod panels;
 pub mod spawn;
 pub mod tasks;
 pub mod theme;
+pub mod usage;
 pub mod vitals;
 pub mod widgets;
